@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% block title %}Reports &amp; Attendance — FaceAttend AI{% endblock %}
+{% block topbar_title %}Reports &amp; Attendance{% endblock %}
+{% block nav_attendance %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .filter-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px; }
+  .filter-group { display:flex; flex-direction:column; gap:4px; }
+  .filter-group label { font-size:0.72rem; font-weight:600; color:var(--text2); letter-spacing:.5px; }
+  .filter-bar .form-control { max-width:200px; }
+  .export-bar {
+    display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    padding: 14px 18px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom:20px;
+  }
+  .export-bar span { font-size:0.8rem; color:var(--text2); font-weight:600; margin-right:4px; }
+  .duration-chip {
+    display:inline-flex; align-items:center; gap:4px;
+    background:rgba(124,111,247,0.12); color:var(--neon2);
+    padding:2px 8px; border-radius:20px; font-size:0.74rem; font-weight:600;
+  }
+  .time-cell { font-variant-numeric:tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-table"></i> Attendance Reports</h1>
+  <p>Filter by person, area or date range — then export to Excel, CSV or print.</p>
+</div>
+
+<!-- Filters -->
+<form method="get" id="filter-form">
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Person</label>
+      <div style="position:relative">
+        <i class="fas fa-search" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:0.78rem;pointer-events:none"></i>
+        <input type="text" name="search" class="form-control" placeholder="Name…" value="{{ search_query }}" style="padding-left:28px;max-width:180px">
+      </div>
+    </div>
+    <div class="filter-group">
+      <label>Area / Dept.</label>
+      <input type="text" name="area" class="form-control" placeholder="Area…" value="{{ area_filter }}" style="max-width:160px">
+    </div>
+    <div class="filter-group">
+      <label>Date</label>
+      <input type="date" name="attendance_date" class="form-control" value="{{ date_filter }}">
+    </div>
+    <div class="filter-group">
+      <label>From</label>
+      <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+    </div>
+    <div class="filter-group">
+      <label>To</label>
+      <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filter</button>
+      {% if search_query or date_filter or area_filter or date_from %}
+        <a href="{% url 'student_attendance_list' %}" class="btn btn-secondary"><i class="fas fa-xmark"></i> Clear</a>
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+<!-- Export bar -->
+<div class="export-bar">
+  <span><i class="fas fa-download" style="color:var(--neon)"></i> Export:</span>
+  <a href="{% url 'export_attendance_excel' %}?{{ request.GET.urlencode }}" class="btn btn-secondary btn-sm">
+    <i class="fas fa-file-excel" style="color:#1d6f42"></i> Excel (.xlsx)
+  </a>
+  <a href="{% url 'export_attendance_csv' %}?{{ request.GET.urlencode }}" class="btn btn-secondary btn-sm">
+    <i class="fas fa-file-csv" style="color:#f5a623"></i> CSV
+  </a>
+  <button onclick="window.print()" class="btn btn-secondary btn-sm">
+    <i class="fas fa-print"></i> Print
+  </button>
+  <span style="margin-left:auto;font-size:0.78rem;color:var(--text2)">{{ flat_rows|length }} record(s)</span>
+</div>
+
+<!-- Table -->
+<div class="glass-card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Photo</th>
+          <th>Name</th>
+          <th>Position</th>
+          <th>Area</th>
+          <th>Schedule</th>
+          <th>Date</th>
+          <th>Check-In</th>
+          <th>Check-Out</th>
+          <th>Duration</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for data in student_attendance_data %}
+          {% for record in data.attendance_records %}
+          <tr>
+            <td>
+              {% if data.student.image %}
+                <img src="{{ data.student.image.url }}" alt="{{ data.student.name }}" class="avatar">
+              {% else %}
+                <div class="avatar" style="background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--text2)">
+                  <i class="fas fa-user" style="font-size:.8rem"></i>
+                </div>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'student-detail' data.student.pk %}" style="font-weight:600;color:var(--text);text-decoration:none;hover:color:var(--neon)">
+                {{ data.student.name }}
+              </a>
+            </td>
+            <td style="color:var(--text2);font-size:0.83rem">{{ data.student.position|default:"—" }}</td>
+            <td style="color:var(--text2);font-size:0.83rem">{{ data.student.area|default:"—" }}</td>
+            <td style="color:var(--text2);font-size:0.83rem">{{ data.student.work_schedule|default:"—" }}</td>
+            <td style="color:var(--text2)">{{ record.date }}</td>
+            <td class="time-cell">
+              {% if record.check_in_time %}
+                <span class="badge badge-success">{{ record.check_in_time|date:"H:i:s" }}</span>
+              {% else %}<span style="color:var(--text2)">—</span>{% endif %}
+            </td>
+            <td class="time-cell">
+              {% if record.check_out_time %}
+                <span class="badge badge-warning">{{ record.check_out_time|date:"H:i:s" }}</span>
+              {% else %}<span style="color:var(--text2);font-size:0.8rem">Not checked out</span>{% endif %}
+            </td>
+            <td>
+              {% if record.check_in_time and record.check_out_time %}
+                <span class="duration-chip"><i class="fas fa-clock"></i> {{ record.calculate_duration }}</span>
+              {% else %}<span style="color:var(--text2)">—</span>{% endif %}
+            </td>
+            <td>
+              {% if record.check_in_time and record.check_out_time %}
+                <span class="badge badge-success"><i class="fas fa-circle-check"></i> Complete</span>
+              {% elif record.check_in_time %}
+                <span class="badge badge-warning"><i class="fas fa-clock"></i> In</span>
+              {% else %}
+                <span class="badge badge-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          {% endfor %}
+        {% empty %}
+        <tr>
+          <td colspan="10" style="text-align:center;color:var(--text2);padding:40px">
+            <i class="fas fa-calendar-xmark" style="font-size:1.5rem;display:block;margin-bottom:8px"></i>
+            No records found.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+@media print {
+  .sidebar, .topbar, .export-bar, form, .btn, .no-print { display:none !important; }
+  .main { margin-left:0 !important; }
+  body { background:#fff !important; color:#000 !important; }
+  .glass-card { border:1px solid #ccc !important; background:#fff !important; }
+  thead th { background:#1a2540 !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  tbody td { color:#000 !important; }
+  .badge { border:1px solid #ccc !important; background:#eee !important; color:#000 !important; }
+}
+</style>
+{% endblock %}

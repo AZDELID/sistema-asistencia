@@ -1,0 +1,54 @@
+# requirements-docker.txt — headless dependencies for Docker / containerised deployment
+#
+# Differences from requirements.txt:
+#   - opencv-python-headless replaces opencv-python (no X11/display system libs needed)
+#   - torch & torchvision are installed separately in the Dockerfile (CPU-only index first)
+#   - facenet-pytorch is installed separately with --no-deps (stale numpy<2.0 constraint)
+#
+# Do NOT use this file directly — let the Dockerfile manage install order.
+
+# Django framework
+Django==6.0.5
+asgiref==3.11.1
+sqlparse==0.5.5
+
+# Scientific computing (PyTorch transitive deps)
+numpy==2.4.4
+sympy==1.14.0
+mpmath==1.3.0
+networkx==3.6.1
+filelock==3.29.0
+fsspec==2026.4.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+packaging==26.2
+
+# Computer vision — headless build avoids X11 system library requirements
+opencv-python-headless==4.13.0.92
+pillow==12.2.0
+
+# Audio (server-side); runs in dummy mode inside the container via SDL_AUDIODRIVER=dummy
+pygame==2.6.1
+
+# QR generation (reading uses cv2.QRCodeDetector — zero extra packages needed)
+qrcode[pil]==8.2
+
+# HTTP / utilities
+requests==2.33.1
+tqdm==4.67.3
+typing_extensions==4.15.0
+certifi==2026.4.22
+charset-normalizer==3.4.7
+idna==3.13
+urllib3==2.7.0
+tzdata==2026.2
+
+# Excel export / import
+openpyxl==3.1.5
+et-xmlfile==2.0.0
+
+# PostgreSQL adapter (binary wheel, no libpq-dev needed in the container)
+psycopg2-binary==2.9.12
+
+# Fotocheck / ID card generation (86×54 mm @ 300 DPI)
+reportlab==4.5.0

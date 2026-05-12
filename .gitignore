@@ -1,0 +1,60 @@
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# ── Virtual environment ───────────────────────────────────────
+venv/
+env/
+.venv/
+
+# ── Django ────────────────────────────────────────────────────
+db.sqlite3
+db.sqlite3.backup.*
+*.sqlite3
+media/
+staticfiles/
+static_collected/
+
+# ── Secrets / credentials ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+secrets.py
+local_settings.py
+
+# ── pip stray files (=version artifacts from pip install) ─────
+=*
+
+# ── IDE / OS ──────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Build / dist ──────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+
+# ── Test / coverage ───────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ── Jupyter ───────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Node (if any frontend tooling added later) ────────────────
+node_modules/
+npm-debug.log*

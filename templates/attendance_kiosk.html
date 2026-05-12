@@ -1,0 +1,532 @@
+{% extends 'base.html' %}
+{% block title %}Attendance Kiosk — FaceAttend AI{% endblock %}
+{% block topbar_title %}Attendance Terminal{% endblock %}
+{% block nav_kiosk %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Remove page-content padding so kiosk fills the full area */
+  .page-content { padding: 0 !important; overflow: hidden; }
+
+  /* Root container fills everything below the topbar */
+  .kiosk-root {
+    height: calc(100vh - 58px);
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    overflow: hidden;
+  }
+
+  /* ── Feed area ─────────────────────────────────────────────── */
+  .kiosk-feed {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #camera-img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: none;
+  }
+
+  .feed-ph {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 20px; color: var(--text2); text-align: center; padding: 40px;
+  }
+  .feed-ph i { font-size: 6rem; color: rgba(255,255,255,0.05); }
+  .feed-ph p  { font-size: 1rem; max-width: 340px; line-height: 1.6; }
+  .feed-ph strong { color: var(--neon); }
+
+  /* Hint pill shown over live feed */
+  .feed-hint {
+    position: absolute; bottom: 84px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 100px; padding: 10px 26px;
+    font-size: 0.92rem; color: rgba(255,255,255,0.78);
+    white-space: nowrap; display: none;
+    pointer-events: none;
+  }
+
+  /* ── Attendance result overlay ─────────────────────────────── */
+  #attend-overlay {
+    position: absolute; inset: 0;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.80);
+    backdrop-filter: blur(8px);
+    z-index: 30;
+    cursor: pointer;
+  }
+  #attend-overlay.show { display: flex; animation: kFadeIn .25s ease; }
+
+  .attend-card {
+    text-align: center;
+    padding: 52px 72px;
+    border-radius: 28px;
+    max-width: 500px;
+    width: 90%;
+    animation: kPopIn .3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .attend-card.checkin {
+    background: rgba(0,245,196,0.07);
+    border: 2px solid rgba(0,245,196,0.30);
+    box-shadow: 0 0 80px rgba(0,245,196,0.08), 0 28px 56px rgba(0,0,0,0.55);
+  }
+  .attend-card.checkout {
+    background: rgba(245,166,35,0.07);
+    border: 2px solid rgba(245,166,35,0.30);
+    box-shadow: 0 0 80px rgba(245,166,35,0.08), 0 28px 56px rgba(0,0,0,0.55);
+  }
+  .attend-card.error {
+    background: rgba(255,77,109,0.07);
+    border: 2px solid rgba(255,77,109,0.30);
+    box-shadow: 0 0 80px rgba(255,77,109,0.08), 0 28px 56px rgba(0,0,0,0.55);
+  }
+  /* already_done — blue/info */
+  .attend-card.already {
+    background: rgba(124,111,247,0.07);
+    border: 2px solid rgba(124,111,247,0.30);
+    box-shadow: 0 0 80px rgba(124,111,247,0.08), 0 28px 56px rgba(0,0,0,0.55);
+  }
+
+  .attend-icon-wrap {
+    width: 88px; height: 88px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.4rem; margin: 0 auto 22px;
+  }
+  .attend-card.checkin  .attend-icon-wrap { background: rgba(0,245,196,0.14); color: var(--neon); }
+  .attend-card.checkout .attend-icon-wrap { background: rgba(245,166,35,0.14); color: var(--neon3); }
+  .attend-card.error    .attend-icon-wrap { background: rgba(255,77,109,0.14); color: var(--danger); }
+  .attend-card.already  .attend-icon-wrap { background: rgba(124,111,247,0.14); color: var(--neon2); }
+
+  .attend-label {
+    font-size: 0.78rem; font-weight: 800; letter-spacing: 2.5px;
+    text-transform: uppercase; margin-bottom: 14px;
+  }
+  .attend-card.checkin  .attend-label { color: var(--neon); }
+  .attend-card.checkout .attend-label { color: var(--neon3); }
+  .attend-card.error    .attend-label { color: var(--danger); }
+  .attend-card.already  .attend-label { color: var(--neon2); }
+
+  /* Subtitle line shown for already_done (remaining time, session complete, etc.) */
+  .attend-meta {
+    font-size: 1.05rem; color: var(--text2); margin-top: 6px; font-weight: 500;
+    min-height: 1.5em;
+  }
+
+  .attend-title {
+    font-size: 1.3rem; font-weight: 700; color: var(--text2);
+    margin-bottom: 10px;
+  }
+  .attend-name {
+    font-size: 2.4rem; font-weight: 800; color: var(--text);
+    margin-bottom: 10px; line-height: 1.15;
+  }
+  .attend-time {
+    font-size: 1.3rem; color: var(--text2); font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .attend-src {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 20px; padding: 5px 14px; border-radius: 20px;
+    font-size: 0.78rem; font-weight: 700;
+  }
+  .attend-src.face { background: rgba(0,245,196,0.10); color: var(--neon); }
+  .attend-src.qr   { background: rgba(124,111,247,0.10); color: var(--neon2); }
+  .attend-src.err  { background: rgba(255,77,109,0.10); color: var(--danger); }
+
+  .attend-dismiss {
+    margin-top: 18px; font-size: 0.78rem; color: rgba(255,255,255,0.3);
+  }
+
+  /* ── Bottom control bar ─────────────────────────────────────── */
+  .kiosk-bar {
+    height: 68px; flex-shrink: 0;
+    background: rgba(10,14,26,0.97);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 24px; gap: 14px;
+    position: relative; z-index: 10;
+  }
+
+  .kbtn {
+    padding: 10px 22px; border: none; border-radius: 10px;
+    font-size: 0.88rem; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    transition: all .2s; white-space: nowrap; flex-shrink: 0;
+  }
+  .kbtn-start { background: linear-gradient(135deg, var(--neon), #00c9a0); color: #000; }
+  .kbtn-start:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .kbtn-stop {
+    background: rgba(255,77,109,0.15); border: 1px solid rgba(255,77,109,0.3);
+    color: var(--danger);
+  }
+  .kbtn-stop:hover { background: rgba(255,77,109,0.25); }
+
+  .kbar-sep { color: var(--border); flex-shrink: 0; }
+
+  .kbar-status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.82rem; color: var(--text2); flex-shrink: 0;
+  }
+
+  .kbar-clock {
+    font-size: 1.15rem; font-weight: 700; color: var(--text);
+    font-variant-numeric: tabular-nums; flex-shrink: 0;
+  }
+
+  .kbar-spacer { flex: 1; }
+
+  .kbar-admin {
+    padding: 8px 16px; border-radius: 8px;
+    border: 1px solid var(--border);
+    color: var(--text2); font-size: 0.82rem; font-weight: 600;
+    text-decoration: none;
+    display: flex; align-items: center; gap: 7px;
+    transition: all .2s; flex-shrink: 0;
+  }
+  .kbar-admin:hover { background: var(--surface2); color: var(--text); }
+
+  @keyframes kFadeIn {
+    from { opacity: 0; } to { opacity: 1; }
+  }
+  @keyframes kPopIn {
+    from { opacity: 0; transform: scale(0.82); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="kiosk-root">
+
+  <!-- Camera feed -->
+  <div class="kiosk-feed" id="kiosk-feed">
+
+    <!-- Placeholder when camera is off -->
+    <div class="feed-ph" id="feed-ph">
+      <i class="fas fa-camera-slash"></i>
+      <p>Press <strong>Start Camera</strong> below to begin attendance registration.<br>
+         Look at the camera or show your QR code.</p>
+    </div>
+
+    <!-- Live stream -->
+    <img id="camera-img" alt="Camera feed">
+
+    <!-- Hint overlay on live feed -->
+    <div class="feed-hint" id="feed-hint">
+      <i class="fas fa-face-smile" style="color:var(--neon)"></i>
+      &nbsp;Look at the camera or scan your QR code
+    </div>
+
+    <!-- ── Attendance result overlay ── -->
+    <div id="attend-overlay">
+      <div class="attend-card" id="attend-card">
+        <div class="attend-icon-wrap">
+          <i id="attend-icon" class="fas fa-circle-check"></i>
+        </div>
+        <div class="attend-label"  id="attend-label">Entry Registered</div>
+        <div class="attend-title"  id="attend-title">Attendance Completed</div>
+        <div class="attend-name"   id="attend-name">—</div>
+        <div class="attend-meta"   id="attend-meta"></div>
+        <div class="attend-time"   id="attend-time">—</div>
+        <span class="attend-src"   id="attend-src">FACE</span>
+        <div class="attend-dismiss" id="attend-dismiss">Tap to close · closing in 6s</div>
+      </div>
+    </div>
+
+  </div><!-- /.kiosk-feed -->
+
+  <!-- Bottom control bar -->
+  <div class="kiosk-bar">
+
+    <button class="kbtn kbtn-start" id="btn-start" onclick="startCamera()">
+      <i class="fas fa-play"></i> Start Camera
+    </button>
+    <button class="kbtn kbtn-stop" id="btn-stop" onclick="stopCamera()" style="display:none">
+      <i class="fas fa-stop"></i> Stop
+    </button>
+
+    <span class="kbar-sep">|</span>
+
+    <span class="kbar-status" id="kbar-status">
+      <i class="fas fa-circle" style="color:var(--border);font-size:.5rem"></i>
+      Offline
+    </span>
+
+    <span class="kbar-sep" style="margin-left:8px">|</span>
+    <span class="kbar-clock" id="kbar-clock">00:00</span>
+
+    <span class="kbar-spacer"></span>
+
+    {% if user.is_authenticated %}
+      <a href="{% url 'logout' %}" class="kbar-admin">
+        <i class="fas fa-right-from-bracket"></i> Logout ({{ user.username }})
+      </a>
+    {% else %}
+      <a href="{% url 'login' %}" class="kbar-admin">
+        <i class="fas fa-shield-halved"></i> Admin Access
+      </a>
+    {% endif %}
+
+  </div><!-- /.kiosk-bar -->
+
+</div><!-- /.kiosk-root -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const CSRF = '{{ csrf_token }}';
+  let polling      = null;
+  let dismissTimer = null;
+  let dismissCount = 0;
+
+  // ── Web Audio — success chime ──────────────────────────────────────────────
+  // AudioContext must be created (or resumed) inside a user gesture.
+  // We unlock it on the first "Start Camera" click and keep it warm.
+  let _audioCtx = null;
+
+  function _unlockAudio() {
+    if (_audioCtx) return;
+    try {
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (_) { /* browser without Web Audio — silent fallback */ }
+  }
+
+  function playSuccessSound(type) {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+
+    // Two-note chime: C5 → E5 for check-in, E5 → C5 for check-out
+    const notes = type === 'checked_out' ? [659, 523] : [523, 659];
+    notes.forEach((freq, i) => {
+      const t    = _audioCtx.currentTime + i * 0.16;
+      const osc  = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(_audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.22, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+      osc.start(t);
+      osc.stop(t + 0.40);
+    });
+  }
+
+  function playAlreadySound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    // Single descending note: A4 → F4 — softer, distinct from the success chime
+    const notes = [440, 349];
+    notes.forEach((freq, i) => {
+      const t    = _audioCtx.currentTime + i * 0.18;
+      const osc  = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(_audioCtx.destination);
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.15, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.30);
+      osc.start(t);
+      osc.stop(t + 0.32);
+    });
+  }
+
+  // ── Camera controls ────────────────────────────────────────────────────────
+  function setRunning(running) {
+    const img  = document.getElementById('camera-img');
+    const ph   = document.getElementById('feed-ph');
+    const hint = document.getElementById('feed-hint');
+    const bS   = document.getElementById('btn-start');
+    const bX   = document.getElementById('btn-stop');
+    const st   = document.getElementById('kbar-status');
+
+    if (running) {
+      img.src = "{% url 'camera_stream' %}?" + Date.now();
+      img.style.display  = 'block';
+      ph.style.display   = 'none';
+      hint.style.display = 'block';
+      bS.style.display   = 'none';
+      bX.style.display   = 'flex';
+      st.innerHTML = '<i class="fas fa-circle" style="color:var(--neon);font-size:.5rem;box-shadow:0 0 6px var(--neon)"></i> Camera live';
+    } else {
+      img.style.display  = 'none'; img.src = '';
+      ph.style.display   = 'flex';
+      hint.style.display = 'none';
+      bS.style.display   = 'flex';
+      bS.innerHTML  = '<i class="fas fa-play"></i> Start Camera';
+      bS.disabled   = false;
+      bX.style.display   = 'none';
+      st.innerHTML = '<i class="fas fa-circle" style="color:var(--border);font-size:.5rem"></i> Offline';
+    }
+  }
+
+  function startCamera() {
+    _unlockAudio();   // user gesture → AudioContext allowed from this point
+    const btn = document.getElementById('btn-start');
+    btn.innerHTML = '<span class="spinner"></span> Starting…';
+    btn.disabled  = true;
+    fetch("{% url 'camera_start' %}", { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+      .then(r => r.json())
+      .then(d => {
+        if (d.status === 'error') {
+          showToast(d.message, 'error');
+          btn.innerHTML = '<i class="fas fa-play"></i> Start Camera';
+          btn.disabled  = false;
+        } else {
+          setTimeout(() => { checkStatus(); startPolling(); }, 900);
+        }
+      })
+      .catch(() => {
+        showToast('Connection error', 'error');
+        btn.innerHTML = '<i class="fas fa-play"></i> Start Camera';
+        btn.disabled  = false;
+      });
+  }
+
+  function stopCamera() {
+    fetch("{% url 'camera_stop' %}", { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+      .then(r => r.json())
+      .then(() => { stopPolling(); setRunning(false); });
+  }
+
+  function checkStatus() {
+    fetch("{% url 'camera_status' %}")
+      .then(r => r.json())
+      .then(d => {
+        setRunning(d.running);
+        if (d.error) showToast(d.error, 'error');
+        const logs = d.logs || [];
+        // Include already_done so the "already marked" card is shown
+        const actionable = logs.filter(e =>
+          ['checked_in', 'checked_out', 'qr_invalid', 'error', 'already_done'].includes(e.type));
+        if (actionable.length > 0)
+          showResult(actionable[actionable.length - 1]);
+      });
+  }
+
+  function startPolling() { if (!polling) polling = setInterval(checkStatus, 1000); }
+  function stopPolling()  { clearInterval(polling); polling = null; }
+
+  // ── Big attendance overlay ─────────────────────────────────────────────────
+  // Per-person throttle: same person triggers "ya fue registrado" at most
+  // once every 12 s; other persons are never blocked.
+  let _alreadyDoneByName = {};
+  const _ALREADY_DONE_MS = 12000;
+
+  function showResult(entry) {
+    const now = new Date().toLocaleTimeString('es-PE',
+      { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Parse name and subtitle early — needed for per-person throttle.
+    // Backend format: "Name checked in/out" or "Name — reason text"
+    const msgParts = entry.msg.split(' — ');
+    const rawName  = msgParts[0]
+      .replace(/ checked (in|out).*/, '')
+      .replace(/ \(face.*/, '')
+      .trim();
+    const subtitle = msgParts.length > 1 ? msgParts.slice(1).join(' — ') : '';
+
+    // ── Per-person throttle for already_done ──────────────────────────────
+    if (entry.type === 'already_done') {
+      const nowMs = Date.now();
+      if (nowMs - (_alreadyDoneByName[rawName] || 0) < _ALREADY_DONE_MS) return;
+      _alreadyDoneByName[rawName] = nowMs;
+    } else if (entry.type === 'checked_in' || entry.type === 'checked_out') {
+      delete _alreadyDoneByName[rawName];   // reset so next already_done shows promptly
+    }
+
+    const overlay = document.getElementById('attend-overlay');
+    const card    = document.getElementById('attend-card');
+
+    let cardCls, icon, label, title;
+    if (entry.type === 'checked_in') {
+      cardCls = 'checkin';  icon = 'fa-circle-check';
+      label   = 'ENTRY REGISTERED'; title = 'Attendance Completed';
+    } else if (entry.type === 'checked_out') {
+      cardCls = 'checkout'; icon = 'fa-right-from-bracket';
+      label   = 'EXIT REGISTERED';  title = 'Session Closed';
+    } else if (entry.type === 'already_done') {
+      cardCls = 'already';  icon = 'fa-clock';
+      label   = 'ALREADY MARKED';   title = 'Attendance Registered';
+    } else if (entry.type === 'qr_invalid') {
+      cardCls = 'error';    icon = 'fa-circle-xmark';
+      label   = 'QR NOT RECOGNIZED'; title = 'Unregistered Code';
+    } else {
+      cardCls = 'error';    icon = 'fa-circle-exclamation';
+      label   = 'ERROR';    title = 'An error occurred';
+    }
+
+    const srcCls = entry.source === 'qr'    ? 'qr'
+                 : entry.type   === 'error' ? 'err' : 'face';
+    const srcLbl = entry.source === 'qr'
+      ? '<i class="fas fa-qrcode"></i> QR'
+      : '<i class="fas fa-face-smile"></i> FACE';
+
+    card.className = `attend-card ${cardCls}`;
+    document.getElementById('attend-icon').className   = `fas ${icon}`;
+    document.getElementById('attend-label').textContent  = label;
+    document.getElementById('attend-title').textContent  = title;
+    document.getElementById('attend-name').textContent   = rawName;
+    document.getElementById('attend-meta').textContent   = subtitle;
+    document.getElementById('attend-time').textContent   = now;
+    const srcEl = document.getElementById('attend-src');
+    srcEl.className = `attend-src ${srcCls}`;
+    srcEl.innerHTML = srcLbl;
+
+    overlay.classList.add('show');
+
+    // Sound — distinct per event type
+    if (entry.type === 'checked_in' || entry.type === 'checked_out') {
+      playSuccessSound(entry.type);
+    } else if (entry.type === 'already_done') {
+      playAlreadySound();
+    }
+
+    // Countdown dismiss (8s for already_done, 6s for rest)
+    const secs = entry.type === 'already_done' ? 8 : 6;
+    clearInterval(dismissTimer);
+    dismissCount = secs;
+    document.getElementById('attend-dismiss').textContent =
+      `Tap to close · closing in ${dismissCount}s`;
+    dismissTimer = setInterval(() => {
+      dismissCount--;
+      if (dismissCount <= 0) {
+        clearInterval(dismissTimer);
+        overlay.classList.remove('show');
+      } else {
+        document.getElementById('attend-dismiss').textContent =
+          `Tap to close · closing in ${dismissCount}s`;
+      }
+    }, 1000);
+  }
+
+  // Tap overlay to close immediately
+  document.getElementById('attend-overlay').addEventListener('click', () => {
+    clearInterval(dismissTimer);
+    document.getElementById('attend-overlay').classList.remove('show');
+  });
+
+  // ── Clock ──────────────────────────────────────────────────────────────────
+  function updateClock() {
+    const el = document.getElementById('kbar-clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('es-PE',
+      { hour: '2-digit', minute: '2-digit' });
+  }
+  setInterval(updateClock, 15000);
+  updateClock();
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    checkStatus();
+    {% if is_running %}startPolling();{% endif %}
+  });
+</script>
+{% endblock %}

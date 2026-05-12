@@ -1,0 +1,57 @@
+# requirements-314.txt — Python 3.14 compatible
+# Install order matters: run install_314.sh instead of pip install -r directly.
+# facenet-pytorch must be installed with --no-deps (see install_314.sh).
+
+# Django framework
+Django==6.0.5
+asgiref==3.11.1
+sqlparse==0.5.5
+
+# PyTorch stack — cp314 wheels
+torch==2.11.0
+torchvision==0.26.0
+
+# numpy 2.x required: numpy <2.0 has no cp314 wheel
+numpy==2.4.4
+
+# Scientific computing (PyTorch deps)
+sympy==1.14.0
+mpmath==1.3.0
+networkx==3.6.1
+filelock==3.29.0
+fsspec==2026.4.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+packaging==26.2
+
+# Computer vision — cp314 wheel available
+opencv-python==4.13.0.92
+# pillow 12+ has cp314 wheel
+pillow==12.2.0
+
+# Face recognition — pure Python wheel, works with numpy 2.x at runtime
+# Must be installed with --no-deps (metadata wrongly declares numpy<2.0)
+# facenet-pytorch==2.6.0  <-- installed separately by install_314.sh
+
+# Audio playback — no cp314 wheel, compiles from source (requires SDL2)
+pygame==2.6.1
+
+# QR code generation (reading uses cv2.QRCodeDetector — no extra package)
+qrcode[pil]==8.2
+
+# HTTP / utilities
+requests==2.33.1
+tqdm==4.67.3
+typing_extensions==4.15.0
+certifi==2026.4.22
+charset-normalizer==3.4.7
+idna==3.13
+urllib3==2.7.0
+tzdata==2026.2
+
+# Excel export
+openpyxl==3.1.5
+et-xmlfile==2.0.0
+
+# Fotocheck / ID card generation (86×54 mm @ 300 DPI)
+reportlab==4.5.0

@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}Error — FaceAttend AI{% endblock %}
+{% block topbar_title %}Error{% endblock %}
+
+{% block content %}
+<div style="max-width:540px;margin:0 auto">
+  <div class="glass-card" style="text-align:center;padding:40px 32px">
+    <div style="width:72px;height:72px;border-radius:50%;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:1.8rem;color:var(--danger)">
+      <i class="fas fa-triangle-exclamation"></i>
+    </div>
+    <h2 style="font-size:1.2rem;margin-bottom:10px">Something went wrong</h2>
+    <div style="background:rgba(255,77,109,0.07);border:1px solid rgba(255,77,109,0.15);border-radius:9px;padding:14px;margin-bottom:24px;font-family:monospace;font-size:0.82rem;color:var(--danger);text-align:left;word-break:break-all">
+      {{ error_message }}
+    </div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;text-align:left;margin-bottom:24px">
+      <div style="font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:10px;font-weight:600">Suggested fixes</div>
+      <ul style="list-style:none;font-size:0.83rem;color:var(--text2);display:flex;flex-direction:column;gap:6px">
+        <li><i class="fas fa-circle-dot" style="color:var(--neon);margin-right:7px"></i>Check the camera is connected and powered on.</li>
+        <li><i class="fas fa-circle-dot" style="color:var(--neon);margin-right:7px"></i>Verify the camera source index or IP address in configuration.</li>
+        <li><i class="fas fa-circle-dot" style="color:var(--neon);margin-right:7px"></i>Ensure no other application is using the camera.</li>
+        <li><i class="fas fa-circle-dot" style="color:var(--neon);margin-right:7px"></i>Check system permissions for camera access.</li>
+      </ul>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a href="{% url 'home' %}" class="btn btn-primary">
+        <i class="fas fa-house"></i> Back to Home
+      </a>
+      <a href="{% url 'camera_config_list' %}" class="btn btn-secondary">
+        <i class="fas fa-sliders"></i> Camera Config
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

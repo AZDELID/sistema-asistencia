@@ -1,0 +1,310 @@
+{% extends 'base.html' %}
+{% block title %}Mark Attendance — FaceAttend AI{% endblock %}
+{% block topbar_title %}Mark Attendance{% endblock %}
+{% block nav_camera %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .camera-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .camera-layout { grid-template-columns: 1fr; } }
+
+  .feed-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .feed-header {
+    padding: 12px 18px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    font-weight: 600; font-size: 0.88rem;
+  }
+  .feed-wrap {
+    position: relative; background: #000;
+    min-height: 340px; display: flex; align-items: center; justify-content: center;
+  }
+  #camera-img { width: 100%; display: block; max-height: 500px; object-fit: contain; }
+  .feed-ph {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 12px; color: var(--text2); padding: 60px 20px; text-align: center;
+  }
+  .feed-ph i { font-size: 3rem; color: rgba(255,255,255,0.08); }
+
+  /* Mode badges */
+  .mode-badges { display: flex; gap: 6px; padding: 10px 16px; border-top: 1px solid var(--border); }
+  .mode-chip {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+  }
+  .mode-chip.face { background: rgba(0,245,196,0.1); color: var(--neon); }
+  .mode-chip.qr   { background: rgba(124,111,247,0.1); color: var(--neon2); }
+  .mode-chip .dot { width:6px;height:6px;border-radius:50%;background:currentColor; }
+
+  /* Controls */
+  .ctrl-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px;
+  }
+  .ctrl-card h3 {
+    font-size: 0.88rem; font-weight: 700; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn-camera {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 11px; border: none; border-radius: 10px;
+    font-size: 0.88rem; font-weight: 700; cursor: pointer;
+    transition: all .2s; margin-bottom: 10px;
+  }
+  .btn-start { background: linear-gradient(135deg, var(--neon), #00c9a0); color: #000; }
+  .btn-start:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-stop  {
+    background: rgba(255,77,109,0.15); border: 1px solid rgba(255,77,109,0.3);
+    color: var(--danger);
+  }
+  .btn-stop:hover { background: rgba(255,77,109,0.25); }
+
+  .stat-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.81rem;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-k { color: var(--text2); }
+  .stat-v { color: var(--text); font-weight: 600; }
+
+  /* Log panel */
+  .log-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-top: 14px;
+  }
+  .log-card h4 {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text2); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #log-list { list-style: none; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+  .log-item {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--surface2); border-radius: 7px; padding: 7px 10px;
+    font-size: 0.79rem; color: var(--text); animation: fadeIn .3s ease;
+  }
+  .log-item .log-icon { flex-shrink: 0; font-size: 0.85rem; }
+  .log-item .log-ts   { margin-left: auto; color: var(--text2); font-size: 0.72rem; }
+
+  /* icon colors by type */
+  .log-item.checked_in    .log-icon { color: var(--neon); }
+  .log-item.checked_out   .log-icon { color: var(--neon3); }
+  .log-item.already_done  .log-icon { color: var(--text2); }
+  .log-item.qr_invalid    .log-icon { color: var(--danger); }
+  .log-item.error         .log-icon { color: var(--danger); }
+
+  /* source pill */
+  .src-pill {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 6px; border-radius: 10px; font-size: 0.68rem; font-weight: 700;
+  }
+  .src-pill.face { background: rgba(0,245,196,0.12); color: var(--neon); }
+  .src-pill.qr   { background: rgba(124,111,247,0.12); color: var(--neon2); }
+
+  .cam-cfg-item {
+    display: flex; align-items: center; gap: 7px; font-size: 0.79rem;
+    color: var(--text2); background: var(--surface2); border-radius: 7px;
+    padding: 7px 10px; margin-bottom: 5px;
+  }
+  .cam-cfg-item i { color: var(--neon2); }
+
+  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-camera"></i> Hybrid Attendance</h1>
+  <p>Camera detects faces <em>and</em> QR codes simultaneously to register attendance.</p>
+</div>
+
+<div class="camera-layout">
+
+  <!-- Feed -->
+  <div class="feed-card">
+    <div class="feed-header">
+      <span><i class="fas fa-video"></i> Live Feed</span>
+      <div id="feed-pill" class="status-pill offline">
+        <span class="dot"></span> <span id="feed-pill-txt">Offline</span>
+      </div>
+    </div>
+
+    <div class="feed-wrap">
+      <div class="feed-ph" id="feed-ph">
+        <i class="fas fa-camera-slash"></i>
+        <p>Camera is stopped.<br>Press <strong>Start Camera</strong> to begin.</p>
+      </div>
+      <img id="camera-img" src="" alt="Camera feed" style="display:none">
+    </div>
+
+    <div class="mode-badges">
+      <span class="mode-chip face"><span class="dot"></span> Face Recognition</span>
+      <span class="mode-chip qr"><span class="dot"></span> QR Detection</span>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div>
+    <div class="ctrl-card">
+      <h3><i class="fas fa-sliders"></i> Camera Controls</h3>
+
+      <button class="btn-camera btn-start" id="btn-start" onclick="startCamera()">
+        <i class="fas fa-play"></i> Start Camera
+      </button>
+      <button class="btn-camera btn-stop" id="btn-stop" onclick="stopCamera()" style="display:none">
+        <i class="fas fa-stop"></i> Stop Camera
+      </button>
+
+      <div style="margin-top:14px">
+        <div class="stat-row"><span class="stat-k">Status</span><span class="stat-v" id="st-run">Offline</span></div>
+        <div class="stat-row"><span class="stat-k">Cameras</span><span class="stat-v">{{ cam_configs.count }}</span></div>
+        <div class="stat-row"><span class="stat-k">Face stability</span><span class="stat-v">3 frames</span></div>
+        <div class="stat-row"><span class="stat-k">QR mode</span><span class="stat-v">Every frame</span></div>
+        <div class="stat-row"><span class="stat-k">Cooldown</span><span class="stat-v">5 s / person</span></div>
+      </div>
+
+      {% if cam_configs %}
+      <div style="margin-top:14px">
+        {% for cfg in cam_configs %}
+        <div class="cam-cfg-item"><i class="fas fa-camera"></i> {{ cfg.name }} (src: {{ cfg.camera_source }})</div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="margin-top:12px;padding:10px 12px;background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.2);border-radius:9px;font-size:0.8rem;color:var(--neon3)">
+        <i class="fas fa-triangle-exclamation"></i>
+        No cameras configured.
+        <a href="{% url 'camera_config_create' %}" style="color:var(--neon);text-decoration:none;font-weight:600"> Add one →</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="log-card">
+      <h4><i class="fas fa-list-check"></i> Event Log</h4>
+      <ul id="log-list">
+        <li id="log-ph" style="list-style:none;font-size:0.79rem;color:var(--text2);padding:5px">
+          Waiting for events…
+        </li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const CSRF = '{{ csrf_token }}';
+  let polling = null;
+
+  const ICONS = {
+    checked_in:   'fa-right-to-bracket',
+    checked_out:  'fa-right-from-bracket',
+    already_done: 'fa-circle-dot',
+    qr_invalid:   'fa-circle-xmark',
+    error:        'fa-circle-xmark',
+  };
+  const TOAST_TYPE = {
+    checked_in: 'success', checked_out: 'info',
+    already_done: 'info', qr_invalid: 'error', error: 'error',
+  };
+
+  function setRunning(running) {
+    const pill  = document.getElementById('feed-pill');
+    const txt   = document.getElementById('feed-pill-txt');
+    const stRun = document.getElementById('st-run');
+    const img   = document.getElementById('camera-img');
+    const ph    = document.getElementById('feed-ph');
+    const bS    = document.getElementById('btn-start');
+    const bX    = document.getElementById('btn-stop');
+
+    if (running) {
+      pill.className = 'status-pill online'; txt.textContent = 'Live';
+      stRun.textContent = 'Running';
+      img.src = "{% url 'camera_stream' %}?" + Date.now();
+      img.style.display = 'block'; ph.style.display = 'none';
+      bS.style.display = 'none'; bX.style.display = 'flex';
+    } else {
+      pill.className = 'status-pill offline'; txt.textContent = 'Offline';
+      stRun.textContent = 'Offline';
+      img.style.display = 'none'; img.src = '';
+      ph.style.display = 'flex';
+      bS.style.display = 'flex'; bS.innerHTML = '<i class="fas fa-play"></i> Start Camera'; bS.disabled = false;
+      bX.style.display = 'none';
+    }
+  }
+
+  function appendLog(entry) {
+    const list = document.getElementById('log-list');
+    const ph   = document.getElementById('log-ph');
+    if (ph) ph.remove();
+
+    const icon = ICONS[entry.type] || 'fa-circle-info';
+    const src  = entry.source || 'face';
+    const ts   = new Date().toLocaleTimeString();
+    const li   = document.createElement('li');
+    li.className = `log-item ${entry.type}`;
+    li.innerHTML = `
+      <i class="fas ${icon} log-icon"></i>
+      <span>${entry.msg}</span>
+      <span class="src-pill ${src}">${src.toUpperCase()}</span>
+      <span class="log-ts">${ts}</span>`;
+    list.prepend(li);
+    if (list.children.length > 50) list.lastChild.remove();
+    showToast(entry.msg, TOAST_TYPE[entry.type] || 'info');
+  }
+
+  function startCamera() {
+    const btn = document.getElementById('btn-start');
+    btn.innerHTML = '<span class="spinner"></span> Starting…';
+    btn.disabled = true;
+    fetch("{% url 'camera_start' %}", {method:'POST', headers:{'X-CSRFToken':CSRF}})
+    .then(r => r.json())
+    .then(d => {
+      if (d.status === 'error') {
+        showToast(d.message, 'error');
+        btn.innerHTML = '<i class="fas fa-play"></i> Start Camera';
+        btn.disabled = false;
+      } else {
+        showToast('Camera starting…', 'info');
+        setTimeout(() => { checkStatus(); startPolling(); }, 900);
+      }
+    })
+    .catch(() => {
+      showToast('Network error', 'error');
+      btn.innerHTML = '<i class="fas fa-play"></i> Start Camera';
+      btn.disabled = false;
+    });
+  }
+
+  function stopCamera() {
+    fetch("{% url 'camera_stop' %}", {method:'POST', headers:{'X-CSRFToken':CSRF}})
+    .then(r => r.json())
+    .then(() => { stopPolling(); setRunning(false); showToast('Camera stopped', 'info'); });
+  }
+
+  function checkStatus() {
+    fetch("{% url 'camera_status' %}")
+    .then(r => r.json())
+    .then(d => {
+      setRunning(d.running);
+      if (d.error) showToast(d.error, 'error');
+      (d.logs || []).forEach(appendLog);
+    });
+  }
+
+  function startPolling() { if (!polling) polling = setInterval(checkStatus, 2000); }
+  function stopPolling()  { clearInterval(polling); polling = null; }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    checkStatus();
+    {% if is_running %}startPolling();{% endif %}
+  });
+</script>
+{% endblock %}

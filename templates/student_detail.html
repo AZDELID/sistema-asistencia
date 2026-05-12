@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block title %}{{ student.name }} — FaceAttend AI{% endblock %}
+{% block topbar_title %}Student Detail{% endblock %}
+{% block nav_students %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media(max-width:720px){ .detail-grid { grid-template-columns: 1fr; } }
+
+  .photo-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; text-align: center;
+  }
+  .photo-card img.face {
+    width: 130px; height: 130px; border-radius: 50%; object-fit: cover;
+    border: 3px solid var(--neon); box-shadow: 0 0 18px rgba(0,245,196,0.18);
+    margin-bottom: 12px;
+  }
+
+  /* QR panel */
+  .qr-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-top: 16px; text-align: center;
+  }
+  .qr-panel h4 {
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text2); margin-bottom: 14px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .qr-img-wrap {
+    background: #fff; border-radius: 10px; padding: 10px;
+    display: inline-block; margin-bottom: 14px;
+  }
+  .qr-img-wrap img { width: 140px; height: 140px; display: block; }
+  .qr-uuid {
+    font-family: monospace; font-size: 0.7rem; color: var(--text2);
+    word-break: break-all; margin-bottom: 12px;
+    background: var(--surface2); border-radius: 6px; padding: 5px 8px;
+  }
+
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media(max-width:500px){ .info-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-id-card"></i> Student Details</h1>
+</div>
+
+<div class="detail-grid">
+  <!-- Left: photo + QR -->
+  <div>
+    <div class="photo-card">
+      {% if student.image %}
+        <img class="face" src="{{ student.image.url }}" alt="{{ student.name }}">
+      {% else %}
+        <div style="width:130px;height:130px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:2.5rem;color:var(--text2)">
+          <i class="fas fa-user"></i>
+        </div>
+      {% endif %}
+      <div style="font-weight:700;font-size:1rem">{{ student.name }}</div>
+      <div style="font-size:0.8rem;color:var(--text2);margin-top:4px">{{ student.student_class }}</div>
+      <div style="margin-top:10px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+        {% if student.authorized %}
+          <span class="badge badge-success"><i class="fas fa-circle-check"></i> Authorized</span>
+        {% else %}
+          <span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>
+        {% endif %}
+        {% if student.qr_active %}
+          <span class="badge badge-success"><i class="fas fa-qrcode"></i> QR Active</span>
+        {% else %}
+          <span class="badge badge-danger"><i class="fas fa-ban"></i> QR Disabled</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- QR panel -->
+    <div class="qr-panel">
+      <h4><i class="fas fa-qrcode"></i> QR Code</h4>
+      {% if student.qr_code %}
+        <div class="qr-img-wrap">
+          <img src="{{ student.qr_code.url }}" alt="QR code for {{ student.name }}">
+        </div>
+        <div class="qr-uuid">{{ student.unique_id }}</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <a href="{% url 'student-qr-download' student.pk %}" class="btn btn-primary btn-sm">
+            <i class="fas fa-download"></i> Download
+          </a>
+          <form method="post" action="{% url 'student-regenerate-qr' student.pk %}" style="display:inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-sm">
+              <i class="fas fa-rotate"></i> Regenerate
+            </button>
+          </form>
+        </div>
+      {% else %}
+        <div style="font-size:0.82rem;color:var(--text2);margin-bottom:12px">
+          No QR generated yet.
+        </div>
+        <form method="post" action="{% url 'student-regenerate-qr' student.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="fas fa-qrcode"></i> Generate QR
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right: info + actions -->
+  <div class="glass-card">
+    <div class="info-grid">
+      <div>
+        <div class="form-label">Full Name</div>
+        <div style="font-weight:600">{{ student.name }}</div>
+      </div>
+      <div>
+        <div class="form-label">Email</div>
+        <div>{{ student.email }}</div>
+      </div>
+      <div>
+        <div class="form-label">Phone</div>
+        <div>{{ student.phone_number }}</div>
+      </div>
+      <div>
+        <div class="form-label">Class / Group</div>
+        <div>{{ student.student_class }}</div>
+      </div>
+      <div style="grid-column:1/-1">
+        <div class="form-label">Unique ID</div>
+        <code style="font-size:0.78rem;color:var(--neon2)">{{ student.unique_id }}</code>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="{% url 'student-authorize' pk=student.pk %}" class="btn btn-primary">
+        <i class="fas fa-shield-halved"></i> Manage Authorization
+      </a>
+      <a href="{% url 'student-credential' student.pk %}" class="btn btn-secondary">
+        <i class="fas fa-id-card"></i> Credential
+      </a>
+      <a href="{% url 'student-list' %}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back to List
+      </a>
+      <a href="{% url 'student-delete' pk=student.pk %}" class="btn btn-danger">
+        <i class="fas fa-trash"></i> Delete
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login — FaceAttend AI</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    :root {
+      --bg: #0a0e1a; --bg2: #0f1526;
+      --surface: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.09);
+      --neon: #00f5c4; --neon2: #7c6ff7;
+      --text: #e2e8f0; --text2: #94a3b8;
+      --danger: #ff4d6d;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,245,196,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,245,196,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 40px 36px;
+      width: 100%; max-width: 380px;
+      position: relative; z-index: 1;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+    }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 32px;
+    }
+    .logo-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--neon), var(--neon2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; color: #000;
+    }
+    .logo-text { font-weight: 700; font-size: 1.1rem; color: var(--text); }
+    .logo-sub  { font-size: 0.7rem; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
+
+    h2 { font-size: 1.25rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .subtitle { font-size: 0.84rem; color: var(--text2); margin-bottom: 28px; }
+
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+    .input-wrap { position: relative; }
+    .input-wrap i {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--text2); font-size: 0.85rem; pointer-events: none;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 10px 14px 10px 36px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: 0.88rem; outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    input:focus {
+      border-color: var(--neon);
+      box-shadow: 0 0 0 3px rgba(0,245,196,0.12);
+    }
+    input::placeholder { color: var(--text2); }
+
+    .btn-login {
+      width: 100%; padding: 11px;
+      background: linear-gradient(135deg, var(--neon), #00c9a0);
+      border: none; border-radius: 8px;
+      font-size: 0.92rem; font-weight: 700; color: #000;
+      cursor: pointer; margin-top: 8px;
+      transition: filter .2s, transform .2s;
+    }
+    .btn-login:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+    .error-msg {
+      background: rgba(255,77,109,0.12);
+      border: 1px solid rgba(255,77,109,0.25);
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 0.84rem; color: var(--danger);
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .back-link {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 20px; text-align: center; justify-content: center;
+      font-size: 0.82rem; color: var(--text2);
+      text-decoration: none; transition: color .2s;
+    }
+    .back-link:hover { color: var(--neon); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <div class="logo-icon"><i class="fas fa-brain"></i></div>
+      <div>
+        <div class="logo-text">FaceAttend AI</div>
+        <div class="logo-sub">Admin Portal</div>
+      </div>
+    </div>
+
+    <h2>Welcome back</h2>
+    <p class="subtitle">Sign in with your administrator credentials.</p>
+
+    {% if messages %}
+      {% for message in messages %}
+      <div class="error-msg"><i class="fas fa-circle-exclamation"></i> {{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="username">Username</label>
+        <div class="input-wrap">
+          <i class="fas fa-user"></i>
+          <input type="text" id="username" name="username" placeholder="admin" required autofocus>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <div class="input-wrap">
+          <i class="fas fa-lock"></i>
+          <input type="password" id="password" name="password" placeholder="••••••••" required>
+        </div>
+      </div>
+      <button type="submit" class="btn-login">
+        <i class="fas fa-right-to-bracket"></i> Sign In
+      </button>
+    </form>
+
+    <a href="{% url 'home' %}" class="back-link">
+      <i class="fas fa-arrow-left"></i> Back to home
+    </a>
+  </div>
+</body>
+</html>

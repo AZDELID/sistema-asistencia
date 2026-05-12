@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}FaceAttend AI{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    :root {
+      --bg:        #0a0e1a;
+      --bg2:       #0f1526;
+      --surface:   rgba(255,255,255,0.04);
+      --surface2:  rgba(255,255,255,0.08);
+      --border:    rgba(255,255,255,0.09);
+      --neon:      #00f5c4;
+      --neon2:     #7c6ff7;
+      --neon3:     #f5a623;
+      --text:      #e2e8f0;
+      --text2:     #94a3b8;
+      --danger:    #ff4d6d;
+      --success:   #00f5c4;
+      --sidebar-w: 240px;
+      --radius:    14px;
+      --trans:     0.22s ease;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0;
+      height: 100vh;
+      z-index: 100;
+      transition: transform var(--trans);
+      overflow: hidden;
+    }
+
+    .sidebar-logo {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo .brand {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none;
+    }
+    .sidebar-logo .brand-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--neon), var(--neon2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; color: #000;
+    }
+    .sidebar-logo .brand-text {
+      font-weight: 700; font-size: 1.1rem; color: var(--text);
+      letter-spacing: 0.5px;
+    }
+    .sidebar-logo .brand-sub {
+      font-size: 0.68rem; color: var(--text2); letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
+
+    .nav-section-label {
+      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--text2); padding: 10px 8px 6px; font-weight: 600;
+    }
+
+    .nav-link {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 9px;
+      color: var(--text2); text-decoration: none;
+      font-size: 0.88rem; font-weight: 500;
+      transition: background var(--trans), color var(--trans);
+      margin-bottom: 2px;
+    }
+    .nav-link:hover, .nav-link.active {
+      background: var(--surface2);
+      color: var(--text);
+    }
+    .nav-link.active { color: var(--neon); }
+    .nav-link i { width: 18px; text-align: center; font-size: 0.9rem; }
+
+    .sidebar-footer {
+      padding: 14px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .sidebar-footer .nav-link { color: var(--danger); }
+    .sidebar-footer .nav-link:hover { background: #ffffff1a; color: var(--danger); }
+
+    /* ── Main ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      height: 58px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 28px;
+      gap: 14px;
+      position: sticky; top: 0; z-index: 50;
+    }
+    .topbar-title { font-weight: 600; font-size: 1rem; color: var(--text); flex: 1; }
+    .topbar-badge {
+      display: flex; align-items: center; gap: 6px;
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 20px; padding: 4px 12px;
+      font-size: 0.78rem; color: var(--text2);
+    }
+    .topbar-badge .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--neon);
+      box-shadow: 0 0 6px var(--neon);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: .4; }
+    }
+
+    .page-content {
+      flex: 1; padding: 28px;
+    }
+
+    /* ── Cards / Surfaces ── */
+    .glass-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(12px);
+      padding: 24px;
+    }
+
+    .page-header {
+      margin-bottom: 24px;
+    }
+    .page-header h1 {
+      font-size: 1.6rem; font-weight: 700; color: var(--text);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .page-header h1 i { color: var(--neon); font-size: 1.3rem; }
+    .page-header p { color: var(--text2); font-size: 0.88rem; margin-top: 4px; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 18px; border-radius: 8px; font-size: 0.87rem;
+      font-weight: 600; cursor: pointer; border: none;
+      text-decoration: none; transition: all var(--trans);
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--neon), #00c9a0);
+      color: #000;
+    }
+    .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
+
+    .btn-secondary {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.12); }
+
+    .btn-danger {
+      background: rgba(255,77,109,0.15); border: 1px solid rgba(255,77,109,0.3);
+      color: var(--danger);
+    }
+    .btn-danger:hover { background: rgba(255,77,109,0.25); }
+
+    .btn-warning {
+      background: rgba(245,166,35,0.15); border: 1px solid rgba(245,166,35,0.3);
+      color: var(--neon3);
+    }
+    .btn-warning:hover { background: rgba(245,166,35,0.25); }
+
+    .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+
+    /* ── Forms ── */
+    .form-group { margin-bottom: 18px; }
+    .form-label {
+      display: block; font-size: 0.82rem; font-weight: 600;
+      color: var(--text2); margin-bottom: 6px; letter-spacing: 0.3px;
+    }
+    .form-control {
+      width: 100%; padding: 10px 14px; font-size: 0.88rem;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      transition: border-color var(--trans), box-shadow var(--trans);
+      outline: none;
+    }
+    .form-control:focus {
+      border-color: var(--neon);
+      box-shadow: 0 0 0 3px rgba(0,245,196,0.12);
+    }
+    .form-control::placeholder { color: var(--text2); }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: var(--surface2); color: var(--text2);
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;
+      padding: 12px 16px; font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody td {
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      font-size: 0.88rem; color: var(--text);
+    }
+    tbody tr:hover td { background: var(--surface2); }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+    }
+    .badge-success { background: rgba(0,245,196,0.12); color: var(--neon); }
+    .badge-danger  { background: rgba(255,77,109,0.12); color: var(--danger); }
+    .badge-warning { background: rgba(245,166,35,0.12); color: var(--neon3); }
+    .badge-muted   { background: var(--surface2); color: var(--text2); }
+
+    /* ── Toast notifications ── */
+    #toast-container {
+      position: fixed; top: 20px; right: 20px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 10px;
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 18px;
+      display: flex; align-items: center; gap: 10px;
+      min-width: 260px; max-width: 360px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      animation: slideIn .3s ease;
+      pointer-events: all;
+    }
+    .toast.success { border-left: 3px solid var(--neon); }
+    .toast.error   { border-left: 3px solid var(--danger); }
+    .toast.info    { border-left: 3px solid var(--neon2); }
+    .toast i { font-size: 1rem; }
+    .toast.success i { color: var(--neon); }
+    .toast.error i   { color: var(--danger); }
+    .toast.info i    { color: var(--neon2); }
+    .toast-msg { font-size: 0.85rem; color: var(--text); flex: 1; }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes fadeOut {
+      to { opacity: 0; transform: translateX(20px); }
+    }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid rgba(0,245,196,0.2);
+      border-top-color: var(--neon);
+      animation: spin .6s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Status pill ── */
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+    }
+    .status-pill .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+    }
+    .status-pill.online  { background: rgba(0,245,196,0.1); color: var(--neon);   }
+    .status-pill.online .dot  { background: var(--neon);   box-shadow: 0 0 6px var(--neon); }
+    .status-pill.offline { background: rgba(255,77,109,0.1); color: var(--danger); }
+    .status-pill.offline .dot { background: var(--danger); }
+
+    /* ── Avatar ── */
+    .avatar {
+      width: 38px; height: 38px; border-radius: 50%; object-fit: cover;
+      border: 2px solid var(--border);
+    }
+
+    /* ── Divider ── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .main { margin-left: 0; }
+      .page-content { padding: 16px; }
+    }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <a href="{% url 'home' %}" class="brand">
+      <div class="brand-icon"><i class="fas fa-brain"></i></div>
+      <div>
+        <div class="brand-text">FaceAttend</div>
+        <div class="brand-sub">AI System</div>
+      </div>
+    </a>
+  </div>
+
+  <nav class="sidebar-nav">
+    {% if user.is_superuser %}
+    {# ── Admin: full navigation ── #}
+    <div class="nav-section-label">Main</div>
+    <a href="{% url 'home' %}" class="nav-link {% block nav_home %}{% endblock %}">
+      <i class="fas fa-house"></i> Dashboard
+    </a>
+    <a href="{% url 'capture_and_recognize' %}" class="nav-link {% block nav_camera %}{% endblock %}">
+      <i class="fas fa-camera"></i> Mark Attendance
+    </a>
+    <a href="{% url 'student_attendance_list' %}" class="nav-link {% block nav_attendance %}{% endblock %}">
+      <i class="fas fa-calendar-check"></i> Attendance Records
+    </a>
+
+    <div class="nav-section-label" style="margin-top:12px">Personnel</div>
+    <a href="{% url 'capture_student' %}" class="nav-link {% block nav_register %}{% endblock %}">
+      <i class="fas fa-user-plus"></i> Register Person
+    </a>
+    <a href="{% url 'import_students' %}" class="nav-link {% block nav_import %}{% endblock %}">
+      <i class="fas fa-file-import"></i> Import List
+    </a>
+    <a href="{% url 'student-list' %}" class="nav-link {% block nav_students %}{% endblock %}">
+      <i class="fas fa-users"></i> Manage Personnel
+    </a>
+    <a href="{% url 'credentials-list' %}" class="nav-link {% block nav_credentials %}{% endblock %}">
+      <i class="fas fa-id-card"></i> Fotochecks
+    </a>
+
+    <div class="nav-section-label" style="margin-top:12px">System</div>
+    <a href="{% url 'camera_config_list' %}" class="nav-link {% block nav_cameras %}{% endblock %}">
+      <i class="fas fa-camera"></i> Cameras
+    </a>
+    <a href="{% url 'system_config' %}" class="nav-link {% block nav_config %}{% endblock %}">
+      <i class="fas fa-sliders"></i> Configuration
+    </a>
+    <a href="/admin/" class="nav-link">
+      <i class="fas fa-shield-halved"></i> Django Admin
+    </a>
+
+    {% elif user.is_authenticated %}
+    {# ── Personal (non-admin staff): kiosk only ── #}
+    <div class="nav-section-label">Attendance</div>
+    <a href="{% url 'attendance_kiosk' %}" class="nav-link {% block nav_kiosk %}{% endblock %}">
+      <i class="fas fa-camera"></i> Register Attendance
+    </a>
+
+    {% else %}
+    {# ── Anonymous: kiosk + admin login ── #}
+    <div class="nav-section-label">Attendance</div>
+    <a href="{% url 'attendance_kiosk' %}" class="nav-link {% block nav_kiosk_anon %}{% endblock %}">
+      <i class="fas fa-camera"></i> Mark Attendance
+    </a>
+    <div class="nav-section-label" style="margin-top:12px">Admin</div>
+    <a href="{% url 'login' %}" class="nav-link">
+      <i class="fas fa-shield-halved"></i> Admin Login
+    </a>
+    {% endif %}
+  </nav>
+
+  <div class="sidebar-footer">
+    {% if user.is_authenticated %}
+    <a href="{% url 'logout' %}" class="nav-link">
+      <i class="fas fa-right-from-bracket"></i> Logout
+      <small style="margin-left:auto;font-size:0.72rem;color:var(--text2)">{{ user.username }}</small>
+    </a>
+    {% else %}
+    <a href="{% url 'login' %}" class="nav-link" style="color:var(--neon)">
+      <i class="fas fa-right-to-bracket"></i> Admin Login
+    </a>
+    {% endif %}
+  </div>
+</aside>
+
+<!-- Main -->
+<div class="main">
+  <header class="topbar">
+    <button class="btn btn-secondary btn-sm" id="sidebar-toggle" style="display:none">
+      <i class="fas fa-bars"></i>
+    </button>
+    <span class="topbar-title">{% block topbar_title %}Dashboard{% endblock %}</span>
+    {% if user.is_authenticated %}
+    <span class="topbar-badge">
+      <span class="dot"></span>
+      {{ user.username }}
+    </span>
+    {% endif %}
+  </header>
+
+  <main class="page-content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Django messages → toasts -->
+{% if messages %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    {% for message in messages %}
+      showToast("{{ message }}", "{% if message.tags == 'error' %}error{% elif message.tags == 'success' %}success{% else %}info{% endif %}");
+    {% endfor %}
+  });
+</script>
+{% endif %}
+
+<script>
+  function showToast(msg, type = 'info', duration = 4000) {
+    const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', info: 'fa-circle-info' };
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i><span class="toast-msg">${msg}</span>`;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => {
+      el.style.animation = 'fadeOut .3s ease forwards';
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // Sidebar mobile toggle
+  const toggle = document.getElementById('sidebar-toggle');
+  const sidebar = document.getElementById('sidebar');
+  if (window.innerWidth <= 768) toggle.style.display = 'flex';
+  toggle?.addEventListener('click', () => sidebar.classList.toggle('open'));
+
+  // Close sidebar on outside click (mobile)
+  document.addEventListener('click', e => {
+    if (window.innerWidth <= 768 && sidebar.classList.contains('open')
+        && !sidebar.contains(e.target) && e.target !== toggle) {
+      sidebar.classList.remove('open');
+    }
+  });
+</script>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>

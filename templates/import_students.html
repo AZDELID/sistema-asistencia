@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% block title %}Import Personnel — FaceAttend AI{% endblock %}
+{% block topbar_title %}Import Personnel{% endblock %}
+{% block nav_import %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .import-grid {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 20px;
+    align-items: start;
+  }
+  @media(max-width:860px){ .import-grid { grid-template-columns: 1fr; } }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 42px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all var(--trans);
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--neon); background: rgba(0,245,196,0.04); }
+  .upload-zone i { font-size: 2.5rem; color: var(--neon); margin-bottom: 12px; display: block; }
+  .upload-zone p { color: var(--text2); font-size: 0.88rem; }
+  .upload-zone strong { color: var(--text); }
+
+  .col-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .col-table th {
+    background: var(--surface2); color: var(--text2);
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px;
+    padding: 8px 12px; font-weight: 600; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .col-table td {
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    font-size: 0.82rem; color: var(--text);
+  }
+  .col-table tr:last-child td { border-bottom: none; }
+  code { font-size: 0.78rem; background: var(--surface2); padding: 1px 5px; border-radius: 4px; color: var(--neon2); }
+  .req { color: var(--danger); font-weight: 700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-file-import"></i> Import Personnel List</h1>
+  <p>Upload a CSV or Excel (.xlsx) file to bulk-register personnel with auto-generated QR codes.</p>
+</div>
+
+<div class="import-grid">
+
+  <!-- Upload form -->
+  <div class="glass-card">
+    <form method="post" enctype="multipart/form-data" id="import-form">
+      {% csrf_token %}
+
+      <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <i class="fas fa-cloud-arrow-up"></i>
+        <p><strong>Click to select file</strong> or drag &amp; drop here</p>
+        <p style="margin-top:6px;font-size:0.78rem">Supported: <code>.csv</code> &nbsp; <code>.xlsx</code></p>
+        <p id="file-name" style="margin-top:10px;color:var(--neon);font-weight:600;display:none"></p>
+      </div>
+
+      <input type="file" id="file-input" name="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="showFileName(this)">
+
+      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary" id="submit-btn" disabled>
+          <i class="fas fa-upload"></i> Import
+        </button>
+        <a href="{% url 'home' %}" class="btn btn-secondary">
+          <i class="fas fa-xmark"></i> Cancel
+        </a>
+        <a href="#" onclick="downloadTemplate()" class="btn btn-secondary" style="margin-left:auto">
+          <i class="fas fa-download"></i> Download Template CSV
+        </a>
+      </div>
+    </form>
+
+    {% if messages %}
+    <hr class="divider">
+    {% for msg in messages %}
+    <div class="toast-inline {% if msg.tags == 'success' %}success{% elif msg.tags == 'error' %}error{% else %}info{% endif %}"
+         style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:8px;margin-top:8px;
+                {% if msg.tags == 'success' %}background:rgba(0,245,196,0.08);border:1px solid rgba(0,245,196,0.2);
+                {% elif msg.tags == 'error' %}background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);
+                {% else %}background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.2);{% endif %}">
+      <i class="fas {% if msg.tags == 'success' %}fa-circle-check{% elif msg.tags == 'error' %}fa-circle-xmark{% else %}fa-triangle-exclamation{% endif %}"
+         style="{% if msg.tags == 'success' %}color:var(--neon){% elif msg.tags == 'error' %}color:var(--danger){% else %}color:var(--neon3){% endif %};margin-top:2px;flex-shrink:0"></i>
+      <span style="font-size:0.84rem">{{ msg }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <!-- Column reference -->
+  <div>
+    <div class="glass-card">
+      <div style="font-size:0.82rem;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">
+        <i class="fas fa-table" style="color:var(--neon)"></i> Expected Columns
+      </div>
+
+      <table class="col-table">
+        <thead>
+          <tr><th>Column name</th><th>Required?</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>name</code> / <code>nombre</code></td><td><span class="req">Yes</span></td></tr>
+          <tr><td><code>email</code> / <code>correo</code></td><td style="color:var(--text2)">Optional</td></tr>
+          <tr><td><code>phone_number</code> / <code>telefono</code></td><td style="color:var(--text2)">Optional</td></tr>
+          <tr><td><code>position</code> / <code>cargo</code></td><td style="color:var(--text2)">Optional</td></tr>
+          <tr><td><code>area</code> / <code>área</code></td><td style="color:var(--text2)">Optional</td></tr>
+          <tr><td><code>work_schedule</code> / <code>horario</code></td><td style="color:var(--text2)">Optional</td></tr>
+          <tr><td><code>student_class</code> / <code>clase</code></td><td style="color:var(--text2)">Optional</td></tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:8px;font-size:0.78rem;color:var(--text2);line-height:1.6">
+        <strong style="color:var(--neon)">Notes:</strong><br>
+        All imported personnel are <strong>auto-authorized</strong> and receive a QR code.<br>
+        Rows with missing <em>name</em> are skipped.<br>
+        Duplicate emails are skipped with a warning.<br>
+        The file encoding must be UTF-8 (or UTF-8 BOM for Excel-exported CSVs).
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showFileName(input) {
+  const fn = document.getElementById('file-name');
+  const btn = document.getElementById('submit-btn');
+  if (input.files.length > 0) {
+    fn.textContent = input.files[0].name;
+    fn.style.display = 'block';
+    btn.disabled = false;
+  }
+}
+
+// Drag & drop
+const dz = document.getElementById('drop-zone');
+const fi = document.getElementById('file-input');
+['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('drag'); }));
+['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('drag'); }));
+dz.addEventListener('drop', ev => {
+  fi.files = ev.dataTransfer.files;
+  showFileName(fi);
+});
+
+// Download template CSV
+function downloadTemplate() {
+  const rows = [
+    ['name','email','phone_number','position','area','work_schedule','student_class'],
+    ['Juan Pérez','juan@empresa.com','987654321','Operador','Producción','8:00-17:00','Turno A'],
+    ['María López','maria@empresa.com','912345678','Supervisora','RRHH','9:00-18:00','Turno B'],
+  ];
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'plantilla_personal.csv';
+  a.click();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,66 @@
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Virtual environment ───────────────────────────────────────────────────────
+# The venv is never needed inside the container — dependencies are installed
+# directly into the image's system Python.
+venv/
+env/
+.venv/
+
+# ── Django runtime artefacts ─────────────────────────────────────────────────
+db.sqlite3
+*.sqlite3
+
+# ── Media uploads ─────────────────────────────────────────────────────────────
+# Managed by the media_data named volume in docker-compose.yml.
+# Exclude from build context to avoid copying large files into every image layer.
+media/
+
+# ── Static collected ─────────────────────────────────────────────────────────
+staticfiles/
+static_collected/
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+secrets.py
+local_settings.py
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Build artefacts ───────────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# ── Stray pip =version files (created by malformed pip invocations) ───────────
+=*
+
+# ── Node (if frontend tooling is added later) ────────────────────────────────
+node_modules/
+
+# ── Claude Code local memory (not part of the project) ───────────────────────
+.claude/

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}Delete Camera — FaceAttend AI{% endblock %}
+{% block topbar_title %}Delete Camera{% endblock %}
+{% block nav_cameras %}active{% endblock %}
+
+{% block content %}
+<div style="max-width:440px;margin:0 auto">
+  <div class="glass-card" style="text-align:center;padding:40px 32px">
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:1.6rem;color:var(--danger)">
+      <i class="fas fa-trash"></i>
+    </div>
+    <h2 style="font-size:1.2rem;margin-bottom:8px">Delete Camera Configuration</h2>
+    <p style="color:var(--text2);font-size:0.88rem;margin-bottom:28px">
+      Are you sure you want to delete
+      <strong style="color:var(--text)">{{ config.name }}</strong>?
+    </p>
+    <form method="POST" style="display:flex;gap:10px;justify-content:center">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i class="fas fa-trash"></i> Yes, Delete
+      </button>
+      <a href="{% url 'camera_config_list' %}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Cancel
+      </a>
+    </form>
+  </div>
+</div>
+{% endblock %}

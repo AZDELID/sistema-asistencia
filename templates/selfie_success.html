@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Registered! — FaceAttend AI{% endblock %}
+{% block topbar_title %}Registration Complete{% endblock %}
+
+{% block content %}
+<div style="max-width:440px;margin:0 auto">
+  <div class="glass-card" style="text-align:center;padding:48px 32px">
+    <div style="width:72px;height:72px;border-radius:50%;background:rgba(0,245,196,0.1);border:1px solid rgba(0,245,196,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:1.8rem;color:var(--neon)">
+      <i class="fas fa-circle-check"></i>
+    </div>
+    <h2 style="font-size:1.25rem;margin-bottom:8px">Registered Successfully!</h2>
+    <p style="color:var(--text2);font-size:0.88rem;margin-bottom:28px;line-height:1.6">
+      Your registration is submitted and is awaiting admin approval.<br>
+      You'll be recognized once an administrator authorizes your account.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a href="{% url 'home' %}" class="btn btn-primary">
+        <i class="fas fa-house"></i> Back to Home
+      </a>
+      <a href="{% url 'capture_student' %}" class="btn btn-secondary">
+        <i class="fas fa-user-plus"></i> Register Another
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

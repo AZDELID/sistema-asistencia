@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}{% if config %}Edit Camera{% else %}Add Camera{% endif %} — FaceAttend AI{% endblock %}
+{% block topbar_title %}{% if config %}Edit Camera{% else %}Add Camera{% endif %}{% endblock %}
+{% block nav_cameras %}active{% endblock %}
+
+{% block content %}
+<div style="max-width:520px;margin:0 auto">
+  <div class="page-header">
+    <h1><i class="fas fa-camera"></i> {% if config %}Edit: {{ config.name }}{% else %}Add Camera{% endif %}</h1>
+  </div>
+
+  <div class="glass-card">
+    {% if messages %}
+      {% for message in messages %}
+      <div style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.25);border-radius:9px;padding:10px 14px;font-size:0.84rem;color:var(--danger);margin-bottom:18px;display:flex;align-items:center;gap:8px">
+        <i class="fas fa-circle-exclamation"></i> {{ message }}
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="POST">
+      {% csrf_token %}
+
+      <div class="form-group">
+        <label class="form-label" for="name">Camera Name</label>
+        <input type="text" class="form-control" id="name" name="name"
+               value="{{ config.name|default:'' }}" placeholder="e.g. Front Door" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="camera_source">Camera Source</label>
+        <input type="text" class="form-control" id="camera_source" name="camera_source"
+               value="{{ config.camera_source|default:'' }}"
+               placeholder="0 for webcam or rtsp://... / http://..." required>
+        <div style="font-size:0.76rem;color:var(--text2);margin-top:5px">
+          Use <code style="color:var(--neon)">0</code> for the default webcam,
+          or an RTSP/HTTP URL for IP cameras.
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="threshold">Recognition Threshold</label>
+        <input type="number" step="0.01" min="0.1" max="1.0" class="form-control"
+               id="threshold" name="threshold"
+               value="{{ config.threshold|default:0.6 }}" required>
+        <div style="font-size:0.76rem;color:var(--text2);margin-top:5px">
+          Lower = stricter (fewer false positives). Default: 0.6
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-floppy-disk"></i> Save
+        </button>
+        <a href="{% url 'camera_config_list' %}" class="btn btn-secondary">
+          <i class="fas fa-arrow-left"></i> Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

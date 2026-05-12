@@ -1,0 +1,501 @@
+{% extends 'base.html' %}
+{% block title %}Registrar Personal — FaceAttend AI{% endblock %}
+{% block topbar_title %}Registrar Personal{% endblock %}
+{% block nav_register %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .reg-layout { display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start; }
+  @media(max-width:768px){ .reg-layout { grid-template-columns:1fr; } }
+
+  .webcam-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); overflow:hidden;
+  }
+  .webcam-header {
+    padding:14px 18px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+    font-weight:600; font-size:0.9rem;
+  }
+  .webcam-body {
+    position:relative; background:#000; min-height:260px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #video { width:100%; display:block; max-height:360px; object-fit:cover; transform:scaleX(-1); }
+  #snapshot-preview {
+    width:100%; display:none; max-height:360px; object-fit:cover; transform:scaleX(-1);
+  }
+  .webcam-footer {
+    padding:14px 18px; border-top:1px solid var(--border);
+    display:flex; gap:10px; align-items:center;
+  }
+  .cam-status {
+    display:flex; align-items:center; gap:6px;
+    font-size:0.78rem; color:var(--text2);
+  }
+  .cam-status .dot {
+    width:7px; height:7px; border-radius:50%;
+    background:var(--neon); box-shadow:0 0 6px var(--neon);
+    animation:pulse 2s infinite;
+  }
+
+  /* Error panel inside webcam-body */
+  #cam-error-panel {
+    position:absolute; inset:0; background:rgba(10,14,26,0.92);
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; padding:24px; text-align:center;
+  }
+
+  /* Conflict warning */
+  .conflict-warn {
+    background:rgba(245,166,35,0.08); border:1px solid rgba(245,166,35,0.3);
+    border-radius:10px; padding:12px 16px; margin-bottom:20px;
+    display:flex; align-items:flex-start; gap:12px; font-size:0.83rem;
+  }
+  .conflict-warn i { color:var(--neon3); flex-shrink:0; margin-top:2px; }
+
+  /* ── Photo instructions box ─────────────────────────── */
+  .photo-tips {
+    background:rgba(0,245,196,0.04); border:1px solid rgba(0,245,196,0.18);
+    border-radius:10px; padding:14px 16px; margin-bottom:16px; font-size:0.8rem;
+  }
+  .photo-tips h5 { color:var(--neon); font-size:0.82rem; margin:0 0 8px;
+                   text-transform:uppercase; letter-spacing:0.5px; }
+  .photo-tips ul { margin:0; padding-left:16px; color:var(--text2); line-height:1.9; }
+  .photo-tips ul li { list-style:none; padding-left:4px; }
+  .photo-tips ul li::before { content:"✓ "; color:var(--neon); font-weight:700; }
+
+  /* ── File drop zone ─────────────────────────────────── */
+  .drop-zone {
+    border:2px dashed rgba(0,245,196,0.35); border-radius:12px;
+    padding:22px 16px; text-align:center; cursor:pointer;
+    transition:border-color 0.2s, background 0.2s;
+    background:rgba(0,245,196,0.02);
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color:var(--neon); background:rgba(0,245,196,0.07);
+  }
+  .drop-zone input[type=file] { display:none; }
+  .drop-zone .dz-icon { font-size:2rem; color:var(--neon); margin-bottom:8px; }
+  .drop-zone .dz-text { font-size:0.83rem; color:var(--text2); }
+  .drop-zone .dz-preview { max-width:100%; max-height:180px; border-radius:8px;
+                            margin-top:10px; display:none; object-fit:contain; }
+  /* tab toggle */
+  .photo-tabs { display:flex; gap:4px; margin-bottom:12px; }
+  .photo-tab-btn {
+    flex:1; padding:8px; border:1px solid var(--border); border-radius:8px;
+    background:var(--surface2); color:var(--text2); font-size:0.82rem;
+    cursor:pointer; transition:all 0.2s; text-align:center;
+  }
+  .photo-tab-btn.active {
+    background:rgba(0,245,196,0.1); border-color:var(--neon); color:var(--neon); font-weight:600;
+  }
+
+  /* webcam panel visible/hidden states */
+  .webcam-section { transition: opacity 0.2s; }
+  .webcam-section.hidden { display: none; }
+
+  /* permissions help box */
+  .perm-help {
+    background: rgba(255,77,109,0.08); border: 1px solid rgba(255,77,109,0.25);
+    border-radius:10px; padding:12px 14px; margin-top:10px;
+    font-size:0.8rem; color:var(--text2); line-height:1.7; display:none;
+  }
+  .perm-help strong { color: var(--danger); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-user-plus"></i> Registrar Personal</h1>
+  <p>Completa el formulario y proporciona una foto. Se generará automáticamente el fotocheck, QR y reconocimiento facial.</p>
+</div>
+
+{% if cam_running %}
+<div class="conflict-warn">
+  <i class="fas fa-triangle-exclamation"></i>
+  <div>
+    <strong style="color:var(--neon3)">La cámara de asistencia está activa.</strong>
+    Puede ocupar el mismo dispositivo y bloquear la webcam aquí.
+    <a href="{% url 'attendance_kiosk' %}" style="color:var(--neon3);text-decoration:underline">
+      Detenerla primero
+    </a> si la vista previa no aparece.
+  </div>
+</div>
+{% endif %}
+
+<!-- Photo instructions banner -->
+<div class="photo-tips" style="margin-bottom:20px">
+  <h5><i class="fas fa-camera"></i> Recomendaciones para la foto del fotocheck</h5>
+  <ul>
+    <li>Frente mirando a la cámara, rostro centrado</li>
+    <li>Fondo blanco o claro (sin elementos distractores)</li>
+    <li>Buena iluminación, sin sombras fuertes en el rostro</li>
+    <li>Sin lentes oscuros ni gorra</li>
+    <li>Formato JPG o PNG — máximo 5 MB</li>
+    <li>Foto vertical tipo carnet o horizontal clara</li>
+  </ul>
+</div>
+
+<div class="reg-layout">
+  <!-- Webcam / Upload panel -->
+  <div class="webcam-card">
+    <div class="webcam-header">
+      <span><i class="fas fa-camera"></i> Vista previa</span>
+      <span class="cam-status" id="cam-status">
+        <span style="color:var(--text2)"><i class="fas fa-image"></i> Modo archivo</span>
+      </span>
+    </div>
+
+    <!-- Webcam section (hidden by default — shown when tab "webcam" is active) -->
+    <div class="webcam-section hidden" id="webcam-section">
+      <div class="webcam-body">
+        <video id="video" autoplay playsinline muted></video>
+        <img   id="snapshot-preview" alt="Snapshot">
+
+        <!-- Error panel (hidden by default) -->
+        <div id="cam-error-panel">
+          <i class="fas fa-camera-slash" style="font-size:2.6rem;color:var(--danger);opacity:.7"></i>
+          <p id="cam-error-msg" style="color:var(--text2);font-size:0.85rem;max-width:280px;line-height:1.5"></p>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="initCamera()">
+            <i class="fas fa-rotate-right"></i> Reintentar
+          </button>
+        </div>
+      </div>
+      <div class="webcam-footer">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-retake"
+                style="display:none" onclick="retake()">
+          <i class="fas fa-rotate-left"></i> Repetir
+        </button>
+        <span style="font-size:0.78rem;color:var(--text2);align-self:center" id="cam-hint">
+          La foto se capturará al hacer clic en Registrar.
+        </span>
+      </div>
+    </div>
+
+    <!-- File upload preview (shown when tab "upload" is active) -->
+    <div id="upload-preview-section" style="padding:16px; min-height:120px; display:flex; align-items:center; justify-content:center;">
+      <img id="filePreviewLarge" style="max-width:100%; max-height:300px; border-radius:8px; display:none; object-fit:contain;" alt="Vista previa">
+      <span id="upload-placeholder" style="color:var(--text2); font-size:0.85rem; text-align:center;">
+        <i class="fas fa-image" style="font-size:2rem; display:block; margin-bottom:8px; color:var(--border);"></i>
+        Vista previa de la foto aparecerá aquí
+      </span>
+    </div>
+
+    <canvas id="canvas" width="640" height="480" style="display:none"></canvas>
+  </div>
+
+  <!-- Form -->
+  <div class="glass-card">
+    <form id="registrationForm" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" id="image_data" name="image_data">
+
+      <div class="form-group">
+        <label class="form-label" for="name">Nombre Completo <span style="color:var(--danger)">*</span></label>
+        <input type="text" class="form-control" id="name" name="name"
+               placeholder="Ej. Juan Pérez García" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="dni">DNI / Número de Identificación</label>
+        <input type="text" class="form-control" id="dni" name="dni"
+               placeholder="Ej. 12345678" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="email">Correo Electrónico</label>
+        <input type="email" class="form-control" id="email" name="email"
+               placeholder="juan@empresa.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="phone_number">Teléfono</label>
+        <input type="text" class="form-control" id="phone_number" name="phone_number"
+               placeholder="+51 999 000 000">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="position">Cargo / Puesto</label>
+        <input type="text" class="form-control" id="position" name="position"
+               placeholder="Ej. Operador, Supervisor, Gerente">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="area">Área / Departamento</label>
+        <input type="text" class="form-control" id="area" name="area"
+               placeholder="Ej. Producción, RRHH, Sistemas">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="work_schedule">Horario de Trabajo</label>
+        <input type="text" class="form-control" id="work_schedule" name="work_schedule"
+               placeholder="Ej. 8:00–17:00 L-V">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="student_class">Grupo / Clase</label>
+        <input type="text" class="form-control" id="student_class" name="student_class"
+               placeholder="Ej. CS-3A">
+      </div>
+
+      <!-- ── Photo source selector ───────────────────────────── -->
+      <div class="form-group">
+        <label class="form-label"><i class="fas fa-image"></i> Foto para Fotocheck</label>
+        <div class="photo-tabs">
+          <button type="button" class="photo-tab-btn active" id="tab-upload" onclick="switchTab('upload')">
+            <i class="fas fa-upload"></i> Subir archivo
+          </button>
+          <button type="button" class="photo-tab-btn" id="tab-webcam" onclick="switchTab('webcam')">
+            <i class="fas fa-camera"></i> Capturar webcam
+          </button>
+        </div>
+
+        <!-- File upload drop zone -->
+        <div id="panel-upload">
+          <div class="drop-zone" id="dropZone" onclick="document.getElementById('photoFileInput').click()">
+            <input type="file" id="photoFileInput" name="photo_upload" accept=".jpg,.jpeg,.png">
+            <div class="dz-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+            <div class="dz-text">Arrastra la foto aquí o <strong style="color:var(--neon)">haz clic</strong><br>
+              <span style="font-size:0.75rem">JPG, PNG — máx 5 MB</span>
+            </div>
+            <img id="filePreview" class="dz-preview" alt="Vista previa">
+          </div>
+        </div>
+
+        <!-- Webcam source (hidden by default) -->
+        <div id="panel-webcam" style="display:none">
+          <div style="font-size:0.8rem;color:var(--text2);margin-bottom:6px">
+            <i class="fas fa-circle-info" style="color:var(--neon)"></i>
+            La foto se captura al hacer clic en <strong style="color:var(--text)">Registrar</strong>.
+          </div>
+          <!-- Help text for camera permission issues -->
+          <div class="perm-help" id="perm-help">
+            <strong>¿No enciende la cámara?</strong><br>
+            • En Chrome: haz clic en el ícono 🔒 en la barra de direcciones → Permisos → Cámara: Permitir<br>
+            • En Firefox: haz clic en el ícono de cámara tachada en la barra de direcciones<br>
+            • Asegúrate de acceder por <strong>localhost</strong> o <strong>HTTPS</strong> (la webcam no funciona en HTTP externo)<br>
+            • Cierra otras apps que usen la cámara (Zoom, Teams, el kiosk de asistencia)
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submitBtn"
+              style="width:100%;justify-content:center;padding:12px;margin-top:8px">
+        <i class="fas fa-id-card"></i> Registrar y Generar Fotocheck
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const video      = document.getElementById('video');
+  const canvas     = document.getElementById('canvas');
+  const imgInput   = document.getElementById('image_data');
+  const form       = document.getElementById('registrationForm');
+  const preview    = document.getElementById('snapshot-preview');
+  const btnRetake  = document.getElementById('btn-retake');
+  const camHint    = document.getElementById('cam-hint');
+  const errPanel   = document.getElementById('cam-error-panel');
+  const errMsg     = document.getElementById('cam-error-msg');
+
+  let stream    = null;
+  let activeTab = 'upload';   // 'upload' | 'webcam'
+  let cameraStarted = false;
+
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    activeTab = tab;
+
+    // Toggle right-column panels
+    document.getElementById('panel-upload').style.display  = (tab === 'upload')  ? '' : 'none';
+    document.getElementById('panel-webcam').style.display  = (tab === 'webcam')  ? '' : 'none';
+    document.getElementById('tab-upload').classList.toggle('active', tab === 'upload');
+    document.getElementById('tab-webcam').classList.toggle('active', tab === 'webcam');
+
+    // Toggle left-column sections
+    const webcamSection     = document.getElementById('webcam-section');
+    const uploadPreview     = document.getElementById('upload-preview-section');
+    const camStatusEl       = document.getElementById('cam-status');
+
+    if (tab === 'webcam') {
+      webcamSection.classList.remove('hidden');
+      uploadPreview.style.display = 'none';
+      camStatusEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>&nbsp;Iniciando…';
+
+      // Start camera if not already running
+      if (!cameraStarted) {
+        // Small delay so DOM is fully painted before getUserMedia
+        setTimeout(initCamera, 80);
+        cameraStarted = true;
+      }
+    } else {
+      webcamSection.classList.add('hidden');
+      uploadPreview.style.display = '';
+      camStatusEl.innerHTML = '<span style="color:var(--text2)"><i class="fas fa-image"></i> Modo archivo</span>';
+    }
+  }
+
+  // ── File upload preview ────────────────────────────────────────────────────
+  const fileInput      = document.getElementById('photoFileInput');
+  const filePreview    = document.getElementById('filePreview');
+  const filePreviewLg  = document.getElementById('filePreviewLarge');
+  const uploadPlaceh   = document.getElementById('upload-placeholder');
+  const dropZone       = document.getElementById('dropZone');
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('La foto no puede superar 5 MB.', 'error');
+      fileInput.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      // Small preview inside drop zone
+      filePreview.src = e.target.result;
+      filePreview.style.display = 'block';
+      // Large preview in left panel
+      filePreviewLg.src = e.target.result;
+      filePreviewLg.style.display = 'block';
+      uploadPlaceh.style.display  = 'none';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  ['dragenter','dragover'].forEach(ev =>
+    dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('drag-over'); }));
+  ['dragleave','drop'].forEach(ev =>
+    dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('drag-over'); }));
+  dropZone.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (file) { fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
+  });
+
+  // ── Camera init ────────────────────────────────────────────────────────────
+  function initCamera() {
+    // Hide error panel, show video element
+    errPanel.style.display  = 'none';
+    video.style.display     = 'block';
+    preview.style.display   = 'none';
+    btnRetake.style.display = 'none';
+
+    document.getElementById('cam-status').innerHTML =
+      '<span class="spinner" style="width:12px;height:12px;border-width:1.5px"></span>&nbsp;Iniciando cámara…';
+
+    // getUserMedia requires HTTPS or localhost
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showCameraError(
+        'API de cámara no disponible. Esta página requiere HTTPS o acceso desde localhost.'
+      );
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+      audio: false
+    })
+    .then(s => {
+      stream = s;
+      video.srcObject = s;
+      video.muted = true;
+      // Wait for video to be ready before calling play()
+      return new Promise((resolve, reject) => {
+        video.onloadedmetadata = () => resolve(video.play());
+        video.onerror = reject;
+      });
+    })
+    .then(() => {
+      document.getElementById('cam-status').innerHTML =
+        '<span class="dot"></span>&nbsp;En vivo';
+      document.getElementById('perm-help').style.display = 'none';
+    })
+    .catch(err => {
+      cameraStarted = false; // allow retry
+      let msg = err.message || 'Error desconocido';
+
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        msg = 'Permiso de cámara denegado. Revisa los permisos del navegador (ver ayuda abajo).';
+        document.getElementById('perm-help').style.display = 'block';
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        msg = 'No se encontró ninguna cámara en este dispositivo.';
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        msg = 'La cámara está en uso por otra aplicación (posiblemente el kiosk de asistencia). Ciérrala primero y reintenta.';
+        document.getElementById('perm-help').style.display = 'block';
+      } else if (err.name === 'OverconstrainedError') {
+        // Retry with relaxed constraints
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          .then(s => {
+            stream = s; video.srcObject = s; video.muted = true;
+            return new Promise((resolve, reject) => {
+              video.onloadedmetadata = () => resolve(video.play());
+              video.onerror = reject;
+            });
+          })
+          .then(() => {
+            document.getElementById('cam-status').innerHTML = '<span class="dot"></span>&nbsp;En vivo';
+          })
+          .catch(e2 => showCameraError(e2.message));
+        return;
+      }
+
+      showCameraError(msg);
+    });
+  }
+
+  function showCameraError(msg) {
+    document.getElementById('cam-status').innerHTML =
+      '<span style="color:var(--danger)"><i class="fas fa-circle-xmark"></i> Sin cámara</span>';
+    errMsg.textContent     = msg;
+    errPanel.style.display = 'flex';
+    video.style.display    = 'none';
+    showToast('Cámara: ' + msg, 'error');
+  }
+
+  function retake() {
+    video.style.display     = 'block';
+    preview.style.display   = 'none';
+    btnRetake.style.display = 'none';
+    imgInput.value          = '';
+    camHint.textContent     = 'La foto se capturará al hacer clic en Registrar.';
+  }
+
+  // ── Form submit ────────────────────────────────────────────────────────────
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+
+    if (activeTab === 'webcam') {
+      // Capture from webcam
+      if (!stream || !stream.active) {
+        showToast('No hay cámara disponible. Permite el acceso o cambia a subir archivo.', 'error');
+        return;
+      }
+      canvas.width  = video.videoWidth  || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      // Mirror the canvas draw to match the flipped video display
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
+
+      const dataURL  = canvas.toDataURL('image/jpeg', 0.92);
+      imgInput.value = dataURL;
+
+      preview.src             = dataURL;
+      video.style.display     = 'none';
+      preview.style.display   = 'block';
+      btnRetake.style.display = 'flex';
+      camHint.textContent     = 'Foto capturada ✓  Enviando…';
+    } else {
+      // File upload mode — validate a file is selected
+      if (!fileInput.files || !fileInput.files[0]) {
+        showToast('Por favor sube una foto para continuar.', 'error');
+        return;
+      }
+    }
+
+    const btn     = document.getElementById('submitBtn');
+    btn.innerHTML = '<span class="spinner"></span> Registrando y generando fotocheck…';
+    btn.disabled  = true;
+
+    form.submit();
+  });
+</script>
+{% endblock %}

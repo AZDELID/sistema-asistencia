@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% block title %}System Configuration — FaceAttend AI{% endblock %}
+{% block topbar_title %}System Configuration{% endblock %}
+{% block nav_config %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+  }
+  .config-section-title {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--text2);
+    display: flex; align-items: center; gap: 7px;
+    margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .config-section-title i { color: var(--neon); }
+
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-label { font-size: 0.88rem; font-weight: 600; }
+  .toggle-desc  { font-size: 0.76rem; color: var(--text2); margin-top: 2px; }
+
+  /* iOS-style toggle */
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 24px; transition: var(--trans);
+  }
+  .slider::before {
+    content: ''; position: absolute; height: 16px; width: 16px;
+    left: 3px; bottom: 3px; background: var(--text2);
+    border-radius: 50%; transition: var(--trans);
+  }
+  .switch input:checked + .slider { background: var(--neon); border-color: var(--neon); }
+  .switch input:checked + .slider::before { transform: translateX(20px); background: #000; }
+
+  .field-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+  .field-row:last-child { margin-bottom: 0; }
+  .field-row label { font-size: 0.8rem; font-weight: 600; color: var(--text2); }
+  .field-help { font-size: 0.73rem; color: var(--text2); margin-top: 3px; }
+
+  .info-banner {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 16px; border-radius: 10px;
+    background: rgba(124,111,247,0.08); border: 1px solid rgba(124,111,247,0.2);
+    margin-bottom: 20px; font-size: 0.82rem; color: var(--text2);
+  }
+  .info-banner i { color: var(--neon2); margin-top: 1px; flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-sliders"></i> System Configuration</h1>
+  <p>Adjust recognition thresholds, enable/disable modules, and fine-tune timing.</p>
+</div>
+
+<div class="info-banner">
+  <i class="fas fa-circle-info"></i>
+  <span>Changes to thresholds and delays take effect on the next camera start. Toggling QR or face recognition here is stored in the database — the live pipeline must be restarted to apply them.</span>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="config-grid">
+
+    <!-- Recognition modules -->
+    <div class="glass-card">
+      <div class="config-section-title"><i class="fas fa-brain"></i> Recognition Modules</div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Face Recognition</div>
+          <div class="toggle-desc">Identify attendance via live facial embeddings</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" name="face_recognition_enabled" {% if config.face_recognition_enabled %}checked{% endif %}>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">QR Code Attendance</div>
+          <div class="toggle-desc">Allow attendance via personal QR scan</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" name="qr_enabled" {% if config.qr_enabled %}checked{% endif %}>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Timing -->
+    <div class="glass-card">
+      <div class="config-section-title"><i class="fas fa-clock"></i> Timing &amp; Delays</div>
+
+      <div class="field-row">
+        <label>Check-out delay (minutes)</label>
+        <input type="number" name="checkout_delay_minutes" class="form-control"
+               value="{{ config.checkout_delay_minutes }}" min="1" max="1440" step="1">
+        <div class="field-help">Minimum minutes between check-in and check-out for the same day.</div>
+      </div>
+
+      <div class="field-row">
+        <label>Duplicate feedback throttle (seconds)</label>
+        <input type="number" name="display_throttle_seconds" class="form-control"
+               value="{{ config.display_throttle_seconds }}" min="1" max="120" step="1">
+        <div class="field-help">How often "ya fue registrado" is shown per person while they remain in frame.</div>
+      </div>
+    </div>
+
+    <!-- Recognition quality -->
+    <div class="glass-card">
+      <div class="config-section-title"><i class="fas fa-crosshairs"></i> Recognition Quality</div>
+
+      <div class="field-row">
+        <label>Default recognition threshold</label>
+        <input type="number" name="recognition_threshold" class="form-control"
+               value="{{ config.recognition_threshold }}" min="0.1" max="1.0" step="0.05">
+        <div class="field-help">
+          L2 distance threshold applied when no per-camera value is set.
+          Lower = stricter (fewer false positives). Recommended: 0.5 – 0.7.
+        </div>
+      </div>
+
+      <div style="margin-top:14px;padding:12px;background:var(--surface2);border-radius:8px;font-size:0.78rem;color:var(--text2)">
+        <strong style="color:var(--text)">Per-camera threshold</strong><br>
+        Each camera can have its own threshold set in
+        <a href="{% url 'camera_config_list' %}" style="color:var(--neon2);text-decoration:none">Camera Config</a>.
+        The per-camera value overrides this default.
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:24px;display:flex;gap:10px">
+    <button type="submit" class="btn btn-primary">
+      <i class="fas fa-floppy-disk"></i> Save Configuration
+    </button>
+    <a href="{% url 'home' %}" class="btn btn-secondary">
+      <i class="fas fa-xmark"></i> Cancel
+    </a>
+  </div>
+</form>
+{% endblock %}

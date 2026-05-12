@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% block title %}Authorize {{ student.name }} — FaceAttend AI{% endblock %}
+{% block topbar_title %}Authorize Student{% endblock %}
+{% block nav_students %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .auth-layout { display:grid; grid-template-columns:260px 1fr; gap:20px; align-items:start; }
+  @media(max-width:700px){ .auth-layout { grid-template-columns:1fr; } }
+
+  .photo-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:24px; text-align:center;
+  }
+  .photo-card img {
+    width:120px;height:120px;border-radius:50%;object-fit:cover;
+    border:3px solid var(--neon);margin-bottom:12px;
+  }
+
+  .toggle-row {
+    display:flex; align-items:center; gap:14px;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; padding:14px 16px; margin-bottom:12px;
+  }
+  .toggle-row .tlabel { flex:1; font-weight:600; font-size:0.88rem; }
+  .toggle-row .tsub   { font-size:0.76rem; color:var(--text2); margin-top:2px; }
+
+  .switch { position:relative; width:46px; height:26px; flex-shrink:0; }
+  .switch input { opacity:0; width:0; height:0; }
+  .slider {
+    position:absolute; inset:0; background:rgba(255,255,255,0.1);
+    border-radius:26px; cursor:pointer; transition:.3s;
+    border:1px solid var(--border);
+  }
+  .slider::before {
+    content:''; position:absolute;
+    width:18px; height:18px; border-radius:50%; background:#fff;
+    left:3px; bottom:3px; transition:.3s;
+  }
+  input:checked + .slider { background:var(--neon); border-color:var(--neon); }
+  input:checked + .slider::before { transform:translateX(20px); background:#000; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-shield-halved"></i> Authorize Student</h1>
+  <p>Toggle access flags for face recognition and QR attendance.</p>
+</div>
+
+<div class="auth-layout">
+  <div class="photo-card">
+    {% if student.image %}
+      <img src="{{ student.image.url }}" alt="{{ student.name }}">
+    {% else %}
+      <div style="width:120px;height:120px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:2.5rem;color:var(--text2)">
+        <i class="fas fa-user"></i>
+      </div>
+    {% endif %}
+    <div style="font-weight:700">{{ student.name }}</div>
+    <div style="font-size:0.8rem;color:var(--text2);margin-top:4px">{{ student.student_class }}</div>
+    <div style="margin-top:10px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+      {% if student.authorized %}
+        <span class="badge badge-success"><i class="fas fa-circle-check"></i> Authorized</span>
+      {% else %}
+        <span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="glass-card">
+    <div style="margin-bottom:18px;font-size:0.82rem;color:var(--text2)">
+      <strong style="color:var(--text)">Email:</strong> {{ student.email }} &nbsp;|&nbsp;
+      <strong style="color:var(--text)">Phone:</strong> {{ student.phone_number }}
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <!-- Face recognition toggle -->
+      <div class="toggle-row">
+        <div>
+          <div class="tlabel"><i class="fas fa-face-smile" style="color:var(--neon);margin-right:6px"></i>Face Recognition</div>
+          <div class="tsub">Allow this student to be recognized by the camera.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" name="authorized" {% if student.authorized %}checked{% endif %}>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- QR toggle -->
+      <div class="toggle-row">
+        <div>
+          <div class="tlabel"><i class="fas fa-qrcode" style="color:var(--neon2);margin-right:6px"></i>QR Code Access</div>
+          <div class="tsub">Allow attendance via QR scan. Disable to invalidate the QR without deleting it.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" name="qr_active" {% if student.qr_active %}checked{% endif %}>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-floppy-disk"></i> Save Changes
+        </button>
+        <a href="{% url 'student-detail' pk=student.pk %}" class="btn btn-secondary">
+          <i class="fas fa-arrow-left"></i> Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Students — FaceAttend AI{% endblock %}
+{% block topbar_title %}Manage Students{% endblock %}
+{% block nav_students %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-users"></i> Student List</h1>
+  <p>Review authorizations and QR access for each registered student.</p>
+</div>
+
+<div class="glass-card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Photo</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Class</th>
+          <th>Face Auth</th>
+          <th>QR</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for student in students %}
+        <tr>
+          <td>
+            {% if student.image %}
+              <img src="{{ student.image.url }}" alt="{{ student.name }}" class="avatar">
+            {% else %}
+              <div class="avatar" style="background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--text2)">
+                <i class="fas fa-user" style="font-size:.85rem"></i>
+              </div>
+            {% endif %}
+          </td>
+          <td style="font-weight:600">{{ student.name }}</td>
+          <td style="color:var(--text2);font-size:0.83rem">{{ student.email }}</td>
+          <td>{{ student.student_class }}</td>
+          <td>
+            {% if student.authorized %}
+              <span class="badge badge-success"><i class="fas fa-circle-check"></i> Yes</span>
+            {% else %}
+              <span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if student.qr_code and student.qr_active %}
+              <span class="badge badge-success"><i class="fas fa-qrcode"></i> Active</span>
+            {% elif student.qr_code and not student.qr_active %}
+              <span class="badge badge-danger"><i class="fas fa-ban"></i> Disabled</span>
+            {% else %}
+              <span class="badge badge-muted"><i class="fas fa-minus"></i> None</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'student-authorize' pk=student.pk %}" class="btn btn-secondary btn-sm">
+              <i class="fas fa-shield-halved"></i> Manage
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" style="text-align:center;color:var(--text2);padding:40px">
+            <i class="fas fa-users-slash" style="font-size:1.5rem;display:block;margin-bottom:8px"></i>
+            No students yet.
+            <a href="{% url 'capture_student' %}" style="color:var(--neon);text-decoration:none;margin-left:6px">Register one →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

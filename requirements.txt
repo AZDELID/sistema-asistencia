@@ -1,0 +1,54 @@
+# requirements.txt — Python 3.12+ compatible (general reference)
+# On Python 3.14 use install_314.sh instead (cp314 wheels differ).
+
+# Django framework
+Django==5.2.14
+asgiref==3.11.1
+sqlparse==0.5.5
+
+# PyTorch (CPU build; GPU builds are pulled automatically by pip on CUDA systems)
+torch==2.11.0
+torchvision==0.26.0
+
+# Scientific computing
+numpy==2.4.4
+sympy==1.14.0
+mpmath==1.3.0
+networkx==3.6.1
+
+# Computer vision
+opencv-python==4.13.0.92
+pillow==12.2.0
+
+# Face recognition — install with --no-deps to avoid false numpy<2.0 constraint
+# pip install --no-deps facenet-pytorch==2.6.0
+facenet-pytorch==2.6.0
+
+# Audio playback (server-side)
+pygame==2.6.1
+
+# QR code generation (reading uses cv2.QRCodeDetector — no extra package needed)
+qrcode[pil]==8.2
+
+# HTTP / utilities
+requests==2.33.1
+tqdm==4.67.3
+typing_extensions==4.15.0
+certifi==2026.4.22
+charset-normalizer==3.4.7
+idna==3.13
+urllib3==2.7.0
+
+# Timezone data
+tzdata==2026.2
+
+# PyTorch internal deps
+filelock==3.29.0
+fsspec==2026.4.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+packaging==26.2
+
+# Excel export
+openpyxl==3.1.5
+et-xmlfile==2.0.0

@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — FaceAttend AI{% endblock %}
+{% block topbar_title %}Dashboard{% endblock %}
+{% block nav_home %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    display: flex; align-items: center; gap: 16px;
+    transition: all var(--trans);
+  }
+  .stat-card:hover { border-color: rgba(255,255,255,0.18); transform: translateY(-2px); }
+  .stat-icon {
+    width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 1.25rem;
+  }
+  .stat-val   { font-size: 1.9rem; font-weight: 800; line-height: 1; }
+  .stat-label { font-size: 0.76rem; color: var(--text2); margin-top: 3px; font-weight: 500; }
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+    align-items: start;
+  }
+  @media(max-width:900px){ .dash-grid { grid-template-columns: 1fr; } }
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-header h2 {
+    font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 7px;
+  }
+  .section-header h2 i { color: var(--neon); }
+  .action-list { display: flex; flex-direction: column; gap: 9px; }
+  .action-item {
+    display: flex; align-items: center; gap: 13px;
+    padding: 12px 14px; border-radius: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    text-decoration: none; color: var(--text); transition: all var(--trans);
+  }
+  .action-item:hover { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.07); }
+  .action-icon {
+    width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 0.95rem;
+  }
+  .action-title { font-size: 0.85rem; font-weight: 600; }
+  .action-desc  { font-size: 0.73rem; color: var(--text2); margin-top: 1px; }
+  .recent-row { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .recent-row:last-child { border-bottom: none; }
+  .empty-state { text-align: center; padding: 28px; color: var(--text2); }
+  .empty-state i { font-size: 1.8rem; display: block; margin-bottom: 8px; opacity: .35; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(0,245,196,0.12);color:var(--neon)"><i class="fas fa-users"></i></div>
+    <div><div class="stat-val">{{ total_students }}</div><div class="stat-label">Total Personnel</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(0,245,196,0.12);color:var(--neon)"><i class="fas fa-circle-check"></i></div>
+    <div><div class="stat-val">{{ authorized_count }}</div><div class="stat-label">Authorized</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(245,166,35,0.12);color:var(--neon3)"><i class="fas fa-clock"></i></div>
+    <div><div class="stat-val">{{ pending_count }}</div><div class="stat-label">Pending Auth</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(124,111,247,0.12);color:var(--neon2)"><i class="fas fa-arrow-right-to-bracket"></i></div>
+    <div><div class="stat-val">{{ today_checkins }}</div><div class="stat-label">Check-ins Today</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:rgba(255,77,109,0.12);color:var(--danger)"><i class="fas fa-arrow-right-from-bracket"></i></div>
+    <div><div class="stat-val">{{ today_checkouts }}</div><div class="stat-label">Check-outs Today</div></div>
+  </div>
+</div>
+
+<div class="dash-grid">
+
+  <div class="glass-card">
+    <div class="section-header">
+      <h2><i class="fas fa-calendar-day"></i> Today's Activity
+        <span style="font-size:0.72rem;color:var(--text2);font-weight:400;margin-left:4px">{{ today }}</span>
+      </h2>
+      <a href="{% url 'student_attendance_list' %}" class="btn btn-secondary btn-sm">
+        <i class="fas fa-arrow-right"></i> All Records
+      </a>
+    </div>
+
+    {% if recent_attendance %}
+      {% for record in recent_attendance %}
+      <div class="recent-row">
+        {% if record.student.image %}
+          <img src="{{ record.student.image.url }}" class="avatar" style="width:32px;height:32px;flex-shrink:0">
+        {% else %}
+          <div class="avatar" style="width:32px;height:32px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.7rem;color:var(--text2);flex-shrink:0"><i class="fas fa-user"></i></div>
+        {% endif %}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:0.83rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ record.student.name }}</div>
+          <div style="font-size:0.72rem;color:var(--text2)">{{ record.student.area|default:record.student.student_class }}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          {% if record.check_in_time %}
+            <div style="font-size:0.78rem;font-variant-numeric:tabular-nums;color:var(--neon)">{{ record.check_in_time|date:"H:i" }}</div>
+          {% endif %}
+          {% if record.check_in_time and record.check_out_time %}
+            <span class="badge badge-success" style="font-size:0.68rem"><i class="fas fa-circle-check"></i> Complete</span>
+          {% elif record.check_in_time %}
+            <span class="badge badge-warning" style="font-size:0.68rem"><i class="fas fa-clock"></i> In</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">
+        <i class="fas fa-calendar-xmark"></i>
+        <p>No attendance recorded today.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="glass-card">
+    <div class="section-header">
+      <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
+    </div>
+    <div class="action-list">
+      <a href="{% url 'attendance_kiosk' %}" class="action-item">
+        <div class="action-icon" style="background:rgba(0,245,196,0.12);color:var(--neon)"><i class="fas fa-camera"></i></div>
+        <div><div class="action-title">Attendance Kiosk</div><div class="action-desc">Face + QR terminal</div></div>
+        <i class="fas fa-chevron-right" style="margin-left:auto;color:var(--text2);font-size:.72rem"></i>
+      </a>
+      <a href="{% url 'capture_student' %}" class="action-item">
+        <div class="action-icon" style="background:rgba(124,111,247,0.12);color:var(--neon2)"><i class="fas fa-user-plus"></i></div>
+        <div><div class="action-title">Register Person</div><div class="action-desc">Webcam photo capture</div></div>
+        <i class="fas fa-chevron-right" style="margin-left:auto;color:var(--text2);font-size:.72rem"></i>
+      </a>
+      <a href="{% url 'import_students' %}" class="action-item">
+        <div class="action-icon" style="background:rgba(0,245,196,0.12);color:var(--neon)"><i class="fas fa-file-import"></i></div>
+        <div><div class="action-title">Import Personnel</div><div class="action-desc">Upload CSV or Excel</div></div>
+        <i class="fas fa-chevron-right" style="margin-left:auto;color:var(--text2);font-size:.72rem"></i>
+      </a>
+      <a href="{% url 'student_attendance_list' %}" class="action-item">
+        <div class="action-icon" style="background:rgba(245,166,35,0.12);color:var(--neon3)"><i class="fas fa-table"></i></div>
+        <div><div class="action-title">Reports &amp; Export</div><div class="action-desc">Excel, CSV, print</div></div>
+        <i class="fas fa-chevron-right" style="margin-left:auto;color:var(--text2);font-size:.72rem"></i>
+      </a>
+      <a href="{% url 'system_config' %}" class="action-item">
+        <div class="action-icon" style="background:rgba(124,111,247,0.12);color:var(--neon2)"><i class="fas fa-sliders"></i></div>
+        <div><div class="action-title">Configuration</div><div class="action-desc">Thresholds, toggles</div></div>
+        <i class="fas fa-chevron-right" style="margin-left:auto;color:var(--text2);font-size:.72rem"></i>
+      </a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
