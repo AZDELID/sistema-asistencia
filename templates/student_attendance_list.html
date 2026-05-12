@@ -5,10 +5,15 @@
 
 {% block extra_head %}
 <style>
+  /* Barra de filtros - espaciado y flexbox */
   .filter-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px; }
+  
+  /* Grupo de filtros - etiquetas en color gris secundario (--text2) */
   .filter-group { display:flex; flex-direction:column; gap:4px; }
   .filter-group label { font-size:0.72rem; font-weight:600; color:var(--text2); letter-spacing:.5px; }
   .filter-bar .form-control { max-width:200px; }
+  
+  /* Barra de exportación - fondo en color de superficie secundaria (--surface2), borde en color gris (--border) */
   .export-bar {
     display:flex; gap:8px; flex-wrap:wrap; align-items:center;
     padding: 14px 18px;
@@ -16,6 +21,8 @@
     border-radius: 10px; margin-bottom:20px;
   }
   .export-bar span { font-size:0.8rem; color:var(--text2); font-weight:600; margin-right:4px; }
+  
+  /* Chip de duración - fondo en color neón morado semi-transparente (rgba(124,111,247,0.12)), texto en neón secundario (--neon2) */
   .duration-chip {
     display:inline-flex; align-items:center; gap:4px;
     background:rgba(124,111,247,0.12); color:var(--neon2);
@@ -36,6 +43,7 @@
   <div class="filter-bar">
     <div class="filter-group">
       <label>Person</label>
+      <!-- Campo de búsqueda con ícono de búsqueda en gris (--text2) -->
       <div style="position:relative">
         <i class="fas fa-search" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:0.78rem;pointer-events:none"></i>
         <input type="text" name="search" class="form-control" placeholder="Name…" value="{{ search_query }}" style="padding-left:28px;max-width:180px">
@@ -60,25 +68,48 @@
     <div style="display:flex;gap:8px;align-items:flex-end">
       <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filter</button>
       {% if search_query or date_filter or area_filter or date_from %}
+        <!-- Botón secundario para limpiar filtros -->
         <a href="{% url 'student_attendance_list' %}" class="btn btn-secondary"><i class="fas fa-xmark"></i> Clear</a>
       {% endif %}
     </div>
   </div>
 </form>
 
-<!-- Export bar -->
-<div class="export-bar">
-  <span><i class="fas fa-download" style="color:var(--neon)"></i> Export:</span>
-  <a href="{% url 'export_attendance_excel' %}?{{ request.GET.urlencode }}" class="btn btn-secondary btn-sm">
-    <i class="fas fa-file-excel" style="color:#1d6f42"></i> Excel (.xlsx)
-  </a>
+<!-- Barra de exportación -->
+<div class="export-bar" style="flex-wrap:wrap;gap:10px;align-items:center;">
+  <span><i class="fas fa-download" style="color:var(--neon)"></i> Exportar:</span>
+
+  <!-- Reporte oficial con selector de mes/año -->
+  <form method="get" action="{% url 'export_attendance_excel' %}" style="display:inline-flex;gap:6px;align-items:center;">
+    <!-- Selectores de mes/año - color de fondo oscuro (--surface2), borde en --border, texto blanco (--text) -->
+    <select name="month" style="height:32px;font-size:0.8rem;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      {% for m_num,m_name in month_choices %}
+        <option value="{{ m_num }}" style="background:var(--surface2);color:var(--text);" {% if m_num == current_month %}selected{% endif %}>{{ m_name }}</option>
+      {% endfor %}
+    </select>
+    <select name="year" style="height:32px;font-size:0.8rem;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      {% for y in year_choices %}
+        <option value="{{ y }}" style="background:var(--surface2);color:var(--text);" {% if y == current_year %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+    {% if request.GET.search %}<input type="hidden" name="search" value="{{ request.GET.search }}">{% endif %}
+    {% if request.GET.area %}<input type="hidden" name="area" value="{{ request.GET.area }}">{% endif %}
+    <!-- Botón de reporte oficial - fondo verde semi-transparente (rgba(29,111,66,0.12)), borde verde (#1d6f42), texto verde (#1d6f42) -->
+    <button type="submit" class="btn btn-secondary btn-sm" style="background:rgba(29,111,66,0.12);border-color:#1d6f42;color:#1d6f42;font-weight:600;">
+      <i class="fas fa-file-excel"></i> Reporte Oficial (.xlsx)
+    </button>
+  </form>
+
+  <!-- Botón CSV - ícono en color naranja (#f5a623) -->
   <a href="{% url 'export_attendance_csv' %}?{{ request.GET.urlencode }}" class="btn btn-secondary btn-sm">
     <i class="fas fa-file-csv" style="color:#f5a623"></i> CSV
   </a>
+  <!-- Botón imprimir -->
   <button onclick="window.print()" class="btn btn-secondary btn-sm">
-    <i class="fas fa-print"></i> Print
+    <i class="fas fa-print"></i> Imprimir
   </button>
-  <span style="margin-left:auto;font-size:0.78rem;color:var(--text2)">{{ flat_rows|length }} record(s)</span>
+  <!-- Contador de registros - texto en gris secundario (--text2) -->
+  <span style="margin-left:auto;font-size:0.78rem;color:var(--text2)">{{ flat_rows|length }} registro(s)</span>
 </div>
 
 <!-- Table -->
@@ -107,35 +138,45 @@
               {% if data.student.image %}
                 <img src="{{ data.student.image.url }}" alt="{{ data.student.name }}" class="avatar">
               {% else %}
+                <!-- Avatar por defecto - fondo en --surface2, ícono en gris (--text2) -->
                 <div class="avatar" style="background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--text2)">
                   <i class="fas fa-user" style="font-size:.8rem"></i>
                 </div>
               {% endif %}
             </td>
+            <!-- Nombre del estudiante - texto en color principal (--text) -->
             <td>
               <a href="{% url 'student-detail' data.student.pk %}" style="font-weight:600;color:var(--text);text-decoration:none;hover:color:var(--neon)">
                 {{ data.student.name }}
               </a>
             </td>
+            <!-- Puesto - texto en gris secundario (--text2) -->
             <td style="color:var(--text2);font-size:0.83rem">{{ data.student.position|default:"—" }}</td>
+            <!-- Área - texto en gris secundario (--text2) -->
             <td style="color:var(--text2);font-size:0.83rem">{{ data.student.area|default:"—" }}</td>
+            <!-- Horario - texto en gris secundario (--text2) -->
             <td style="color:var(--text2);font-size:0.83rem">{{ data.student.work_schedule|default:"—" }}</td>
+            <!-- Fecha - texto en gris secundario (--text2) -->
             <td style="color:var(--text2)">{{ record.date }}</td>
+            <!-- Hora entrada - badge verde (badge-success) para hora válida, o gris (--text2) si no hay -->
             <td class="time-cell">
               {% if record.check_in_time %}
                 <span class="badge badge-success">{{ record.check_in_time|date:"H:i:s" }}</span>
               {% else %}<span style="color:var(--text2)">—</span>{% endif %}
             </td>
+            <!-- Hora salida - badge naranja (badge-warning) para hora válida, o gris (--text2) si no hay -->
             <td class="time-cell">
               {% if record.check_out_time %}
                 <span class="badge badge-warning">{{ record.check_out_time|date:"H:i:s" }}</span>
               {% else %}<span style="color:var(--text2);font-size:0.8rem">Not checked out</span>{% endif %}
             </td>
+            <!-- Duración - chip con colores neón morado (--neon2) -->
             <td>
               {% if record.check_in_time and record.check_out_time %}
                 <span class="duration-chip"><i class="fas fa-clock"></i> {{ record.calculate_duration }}</span>
               {% else %}<span style="color:var(--text2)">—</span>{% endif %}
             </td>
+            <!-- Estado - badge verde para completo, naranja para en progreso, gris para ninguno -->
             <td>
               {% if record.check_in_time and record.check_out_time %}
                 <span class="badge badge-success"><i class="fas fa-circle-check"></i> Complete</span>
@@ -149,6 +190,7 @@
           {% empty %}
           {% endfor %}
         {% empty %}
+        <!-- Mensaje de sin registros - ícono y texto en gris (--text2) -->
         <tr>
           <td colspan="10" style="text-align:center;color:var(--text2);padding:40px">
             <i class="fas fa-calendar-xmark" style="font-size:1.5rem;display:block;margin-bottom:8px"></i>
@@ -162,13 +204,25 @@
 </div>
 
 <style>
+/* Estilos de impresión */
 @media print {
+  /* Elementos a ocultar - display none para no aparecer en impresión */
   .sidebar, .topbar, .export-bar, form, .btn, .no-print { display:none !important; }
+  
+  /* Ajustes de márgenes y fondo para impresión */
   .main { margin-left:0 !important; }
   body { background:#fff !important; color:#000 !important; }
+  
+  /* Tarjeta principal - fondo blanco para impresión */
   .glass-card { border:1px solid #ccc !important; background:#fff !important; }
+  
+  /* Encabezados de tabla - fondo azul oscuro (#1a2540) con texto blanco para imprimir */
   thead th { background:#1a2540 !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  
+  /* Celdas de datos - texto negro para contraste en impresión */
   tbody td { color:#000 !important; }
+  
+  /* Badges - borde gris, fondo gris claro, texto negro para impresión */
   .badge { border:1px solid #ccc !important; background:#eee !important; color:#000 !important; }
 }
 </style>

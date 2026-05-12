@@ -732,6 +732,19 @@ def student_attendance_list(request):
             grouped[student.pk] = {'student': student, 'attendance_records': []}
         grouped[student.pk]['attendance_records'].append(record)
 
+    import datetime as _dt
+    _today = _dt.date.today()
+    month_choices = [
+        (1,"Enero"),(2,"Febrero"),(3,"Marzo"),(4,"Abril"),
+        (5,"Mayo"),(6,"Junio"),(7,"Julio"),(8,"Agosto"),
+        (9,"Setiembre"),(10,"Octubre"),(11,"Noviembre"),(12,"Diciembre"),
+    ]
+    try:
+        _cur_month = int(request.GET.get('month', _today.month))
+        _cur_year  = int(request.GET.get('year',  _today.year))
+    except (ValueError, TypeError):
+        _cur_month, _cur_year = _today.month, _today.year
+
     return render(request, 'student_attendance_list.html', {
         'student_attendance_data': list(grouped.values()),
         'flat_rows':     rows,
@@ -740,6 +753,10 @@ def student_attendance_list(request):
         'date_filter':   date_val,
         'date_from':     date_from,
         'date_to':       date_to,
+        'month_choices': month_choices,
+        'year_choices':  list(range(_today.year - 3, _today.year + 2)),
+        'current_month': _cur_month,
+        'current_year':  _cur_year,
     })
 
 
@@ -771,47 +788,71 @@ def export_attendance_csv(request):
 @login_required
 @user_passes_test(is_admin)
 def export_attendance_excel(request):
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment
+    """
+    Export attendance as the official IESTP Paucartambo report format.
+    Accepts ?month=8&year=2025 (defaults to current month/year).
+    Also accepts the existing date filters for backward compatibility.
+    """
+    import calendar as cal_mod
+    import datetime
+    from app1.report_excel import build_report
 
-    rows = _attendance_queryset(request)
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = 'Asistencia'
+    # ── resolve month/year ────────────────────────────────────────────────────
+    today = datetime.date.today()
+    try:
+        month = int(request.GET.get('month', today.month))
+        year  = int(request.GET.get('year',  today.year))
+        if not (1 <= month <= 12 and 1900 <= year <= 2100):
+            raise ValueError
+    except (ValueError, TypeError):
+        month, year = today.month, today.year
 
-    headers = ['Nombre', 'Cargo', 'Área', 'Horario', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Estado']
-    hfont = Font(bold=True, color='FFFFFF')
-    hfill = PatternFill('solid', fgColor='0F1526')
+    days_in_month = cal_mod.monthrange(year, month)[1]
 
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.font = hfont
-        cell.fill = hfill
-        cell.alignment = Alignment(horizontal='center')
+    # ── fetch all students ────────────────────────────────────────────────────
+    from app1.models import Student, Attendance
+    search = request.GET.get('search', '').strip()
+    area   = request.GET.get('area',   '').strip()
 
-    for student, record in rows:
-        estado = 'Completo' if (record.check_in_time and record.check_out_time) else 'Solo entrada'
-        ws.append([
-            student.name,
-            student.position,
-            student.area,
-            student.work_schedule,
-            str(record.date),
-            record.check_in_time.strftime('%H:%M:%S') if record.check_in_time else '',
-            record.check_out_time.strftime('%H:%M:%S') if record.check_out_time else '',
-            record.calculate_duration() or '',
-            estado,
-        ])
+    students_qs = Student.objects.all().order_by('name')
+    if search:
+        students_qs = students_qs.filter(name__icontains=search)
+    if area:
+        students_qs = students_qs.filter(area__icontains=area)
 
-    for col in ws.columns:
-        max_len = max((len(str(cell.value or '')) for cell in col), default=8)
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 42)
+    # ── build per-student attendance sets ─────────────────────────────────────
+    students_data = []
+    for idx, student in enumerate(students_qs, 1):
+        records = Attendance.objects.filter(
+            student=student,
+            date__year=year,
+            date__month=month,
+        )
+        attended_days = set(r.date.day for r in records if r.check_in_time)
+        students_data.append({
+            'number':    idx,
+            'dni':       student.dni or '',
+            'name':      student.name,
+            'position':  student.position or '',
+            'condition': 'Contratado',   # default; extend model if needed
+            'attendance': attended_days,
+        })
+
+    # ── generate Excel ────────────────────────────────────────────────────────
+    xlsx_bytes = build_report(students_data, month=month, year=year)
+
+    month_name_es = {
+        1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",
+        5:"Mayo",6:"Junio",7:"Julio",8:"Agosto",
+        9:"Setiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"
+    }[month]
+    filename = f"Reporte_Asistencia_{month_name_es}_{year}.xlsx"
 
     response = HttpResponse(
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        xlsx_bytes,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
-    response['Content-Disposition'] = 'attachment; filename="asistencia.xlsx"'
-    wb.save(response)
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -1119,7 +1160,15 @@ def student_regenerate_fotocheck(request, pk):
 def credentials_list(request):
     """Panel: list all personnel with fotocheck status + bulk generation."""
     students = Student.objects.all().order_by('name')
-    return render(request, 'credentials_list.html', {'students': students})
+    total_students = students.count()
+    generated_count = students.exclude(fotocheck_png='').count()
+    pending_count = total_students - generated_count
+    return render(request, 'credentials_list.html', {
+        'students': students,
+        'total_students': total_students,
+        'generated_count': generated_count,
+        'pending_count': pending_count,
+    })
 
 
 @login_required

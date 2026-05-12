@@ -26,6 +26,7 @@ _ASSETS_DIR = Path(__file__).parent / "static" / "app1" / "fotocheck_assets"
 
 # Ruta específica del archivo de imagen que sirve como base o fondo del fotocheck
 PLANTILLA_PATH = _ASSETS_DIR / "plantilla.jpeg"
+LOGO_PATH = _ASSETS_DIR / "logo.png"
 
 # =============================================================================
 # TAMAÑO DE LA TARJETA (CARD SIZE)
@@ -63,7 +64,7 @@ DNI_X1, DNI_Y1, DNI_X2, DNI_Y2 = 185, 670, 470, 800
 CARGO_X1, CARGO_Y1, CARGO_X2, CARGO_Y2 = 185, 740, 470, 900
 
 # Área para el departamento o área a la que pertenece
-AREA_X1, AREA_Y1, AREA_X2, AREA_Y2 = 185, 8100, 470, 1000
+AREA_X1, AREA_Y1, AREA_X2, AREA_Y2 = 185, 818, 470, 1000
 
 # =============================================================================
 # CÓDIGO QR (QR)
@@ -410,6 +411,46 @@ def _make_circular(img, radius):
 # =============================================================================
 
 
+def _load_qr_logo():
+
+    if not LOGO_PATH.exists():
+        return None
+
+    try:
+        return Image.open(LOGO_PATH).convert("RGBA")
+    except Exception:
+        logger.exception("QR logo load failed")
+        return None
+
+
+def _embed_qr_logo(qr_img):
+
+    logo = _load_qr_logo()
+    if logo is None:
+        return qr_img
+
+    qr_w, qr_h = qr_img.size
+    max_logo_side = int(min(qr_w, qr_h) * 0.22)
+    logo.thumbnail((max_logo_side, max_logo_side), Image.LANCZOS)
+
+    logo_w, logo_h = logo.size
+    ox = (qr_w - logo_w) // 2
+    oy = (qr_h - logo_h) // 2
+
+    # Fondo cuadrado blanco detrás del logo, casi del tamaño del logo actual
+    bg_size = max(logo_w, logo_h) + 12
+    bg = Image.new("RGBA", (bg_size, bg_size), (255, 255, 255, 255))
+
+    bg_x = (qr_w - bg_size) // 2
+    bg_y = (qr_h - bg_size) // 2
+
+    overlay = Image.new("RGBA", qr_img.size, (0, 0, 0, 0))
+    overlay.paste(bg, (bg_x, bg_y))
+    overlay.paste(logo, (ox, oy), logo)
+
+    return Image.alpha_composite(qr_img, overlay)
+
+
 def _make_qr(data):
 
     qr = qrcode.QRCode(
@@ -423,10 +464,12 @@ def _make_qr(data):
 
     qr.make(fit=True)
 
-    return qr.make_image(
+    qr_img = qr.make_image(
         fill_color=(0, 0, 0),       # Color de los módulos (Negro)
         back_color="transparent"    # Esto activa la transparencia directamente
     ).convert("RGBA")
+
+    return _embed_qr_logo(qr_img)
 
 
 def generate_qr_with_logo(student):
