@@ -29,6 +29,22 @@
     padding:2px 8px; border-radius:20px; font-size:0.74rem; font-weight:600;
   }
   .time-cell { font-variant-numeric:tabular-nums; }
+
+  /* Month/year selectors — force dark theme; browser resets override inline CSS vars on <option> */
+  .report-select {
+    height:32px; font-size:0.8rem; padding:2px 8px;
+    border-radius:6px; border:1px solid var(--border);
+    background:var(--surface2); color:var(--text);
+    color-scheme: dark;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 26px;
+    cursor: pointer;
+  }
+  .report-select:focus { outline: none; border-color: var(--neon); }
+  .report-select option { background: #1a2035; color: #e2e8f0; }
 </style>
 {% endblock %}
 
@@ -37,6 +53,20 @@
   <h1><i class="fas fa-table"></i> Attendance Reports</h1>
   <p>Filter by person, area or date range — then export to Excel, CSV or print.</p>
 </div>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:8px;margin-bottom:8px;font-size:0.84rem;
+    {% if msg.tags == 'success' %}background:rgba(0,245,196,0.08);border:1px solid rgba(0,245,196,0.2);
+    {% elif msg.tags == 'error' %}background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);
+    {% elif msg.tags == 'info' %}background:rgba(124,111,247,0.08);border:1px solid rgba(124,111,247,0.25);
+    {% else %}background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.2);{% endif %}">
+    <i class="fas {% if msg.tags == 'success' %}fa-circle-check{% elif msg.tags == 'error' %}fa-circle-xmark{% elif msg.tags == 'info' %}fa-circle-info{% else %}fa-triangle-exclamation{% endif %}"
+       style="{% if msg.tags == 'success' %}color:var(--neon){% elif msg.tags == 'error' %}color:var(--danger){% elif msg.tags == 'info' %}color:var(--neon2){% else %}color:var(--neon3){% endif %};margin-top:2px;flex-shrink:0"></i>
+    <span>{{ msg }}</span>
+  </div>
+  {% endfor %}
+{% endif %}
 
 <!-- Filters -->
 <form method="get" id="filter-form">
@@ -75,21 +105,28 @@
   </div>
 </form>
 
+{% if not date_filter and not date_from and not date_to and not search_query and not area_filter %}
+<div style="font-size:0.78rem;color:var(--text2);margin-bottom:12px;display:flex;align-items:center;gap:6px">
+  <i class="fas fa-circle-info" style="color:var(--neon2)"></i>
+  Mostrando todos los registros. Usa los filtros para acotar por fecha, nombre o área.
+</div>
+{% endif %}
+
 <!-- Barra de exportación -->
 <div class="export-bar" style="flex-wrap:wrap;gap:10px;align-items:center;">
   <span><i class="fas fa-download" style="color:var(--neon)"></i> Exportar:</span>
 
   <!-- Reporte oficial con selector de mes/año -->
   <form method="get" action="{% url 'export_attendance_excel' %}" style="display:inline-flex;gap:6px;align-items:center;">
-    <!-- Selectores de mes/año - color de fondo oscuro (--surface2), borde en --border, texto blanco (--text) -->
-    <select name="month" style="height:32px;font-size:0.8rem;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+    <!-- Selectores de mes/año -->
+    <select name="month" class="report-select">
       {% for m_num,m_name in month_choices %}
-        <option value="{{ m_num }}" style="background:var(--surface2);color:var(--text);" {% if m_num == current_month %}selected{% endif %}>{{ m_name }}</option>
+        <option value="{{ m_num }}" {% if m_num == current_month %}selected{% endif %}>{{ m_name }}</option>
       {% endfor %}
     </select>
-    <select name="year" style="height:32px;font-size:0.8rem;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+    <select name="year" class="report-select">
       {% for y in year_choices %}
-        <option value="{{ y }}" style="background:var(--surface2);color:var(--text);" {% if y == current_year %}selected{% endif %}>{{ y }}</option>
+        <option value="{{ y }}" {% if y == current_year %}selected{% endif %}>{{ y }}</option>
       {% endfor %}
     </select>
     {% if request.GET.search %}<input type="hidden" name="search" value="{{ request.GET.search }}">{% endif %}
@@ -118,16 +155,17 @@
     <table>
       <thead>
         <tr>
-          <th>Photo</th>
-          <th>Name</th>
-          <th>Position</th>
-          <th>Area</th>
-          <th>Schedule</th>
-          <th>Date</th>
-          <th>Check-In</th>
-          <th>Check-Out</th>
-          <th>Duration</th>
-          <th>Status</th>
+          <th>Foto</th>
+          <th>DNI</th>
+          <th>Nombre</th>
+          <th>Cargo</th>
+          <th>Área</th>
+          <th>Horario</th>
+          <th>Fecha</th>
+          <th>Entrada</th>
+          <th>Salida</th>
+          <th>Duración</th>
+          <th>Estado</th>
         </tr>
       </thead>
       <tbody>
@@ -136,25 +174,35 @@
           <tr>
             <td>
               {% if data.student.image %}
-                <img src="{{ data.student.image.url }}" alt="{{ data.student.name }}" class="avatar">
+                <img src="{{ data.student.image.url }}" alt="{{ data.student.display_name }}" class="avatar">
               {% else %}
-                <!-- Avatar por defecto - fondo en --surface2, ícono en gris (--text2) -->
                 <div class="avatar" style="background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--text2)">
                   <i class="fas fa-user" style="font-size:.8rem"></i>
                 </div>
               {% endif %}
             </td>
-            <!-- Nombre del estudiante - texto en color principal (--text) -->
+            <!-- DNI — columna propia, nunca mezclada con el nombre -->
             <td>
-              <a href="{% url 'student-detail' data.student.pk %}" style="font-weight:600;color:var(--text);text-decoration:none;hover:color:var(--neon)">
-                {{ data.student.name }}
+              {% if data.student.dni %}
+                <span style="font-family:monospace;font-size:0.78rem;color:var(--neon2);background:var(--surface2);padding:2px 6px;border-radius:4px">{{ data.student.dni }}</span>
+              {% else %}
+                <span style="color:var(--text2)">—</span>
+              {% endif %}
+            </td>
+            <!-- Nombre limpio — usa display_name, nunca "Pendiente - DNI …" -->
+            <td>
+              <a href="{% url 'student-detail' data.student.pk %}"
+                 style="font-weight:600;color:{% if data.student.display_name == 'Desconocido' %}var(--text2){% else %}var(--text){% endif %};text-decoration:none">
+                {% if data.student.display_name == 'Desconocido' %}
+                  <i class="fas fa-circle-question" style="font-size:0.75rem;margin-right:4px;color:var(--text2)"></i>
+                  <em>Desconocido</em>
+                {% else %}
+                  {{ data.student.display_name }}
+                {% endif %}
               </a>
             </td>
-            <!-- Puesto - texto en gris secundario (--text2) -->
             <td style="color:var(--text2);font-size:0.83rem">{{ data.student.position|default:"—" }}</td>
-            <!-- Área - texto en gris secundario (--text2) -->
             <td style="color:var(--text2);font-size:0.83rem">{{ data.student.area|default:"—" }}</td>
-            <!-- Horario - texto en gris secundario (--text2) -->
             <td style="color:var(--text2);font-size:0.83rem">{{ data.student.work_schedule|default:"—" }}</td>
             <!-- Fecha - texto en gris secundario (--text2) -->
             <td style="color:var(--text2)">{{ record.date }}</td>
@@ -164,24 +212,28 @@
                 <span class="badge badge-success">{{ record.check_in_time|date:"H:i:s" }}</span>
               {% else %}<span style="color:var(--text2)">—</span>{% endif %}
             </td>
-            <!-- Hora salida - badge naranja (badge-warning) para hora válida, o gris (--text2) si no hay -->
+            <!-- Hora salida -->
             <td class="time-cell">
               {% if record.check_out_time %}
                 <span class="badge badge-warning">{{ record.check_out_time|date:"H:i:s" }}</span>
-              {% else %}<span style="color:var(--text2);font-size:0.8rem">Not checked out</span>{% endif %}
+              {% elif record.check_in_time %}
+                <span style="color:var(--text2);font-size:0.8rem">—</span>
+              {% else %}
+                <span style="color:var(--text2)">—</span>
+              {% endif %}
             </td>
-            <!-- Duración - chip con colores neón morado (--neon2) -->
+            <!-- Duración -->
             <td>
               {% if record.check_in_time and record.check_out_time %}
                 <span class="duration-chip"><i class="fas fa-clock"></i> {{ record.calculate_duration }}</span>
               {% else %}<span style="color:var(--text2)">—</span>{% endif %}
             </td>
-            <!-- Estado - badge verde para completo, naranja para en progreso, gris para ninguno -->
+            <!-- Estado -->
             <td>
               {% if record.check_in_time and record.check_out_time %}
-                <span class="badge badge-success"><i class="fas fa-circle-check"></i> Complete</span>
+                <span class="badge badge-success"><i class="fas fa-circle-check"></i> Completo</span>
               {% elif record.check_in_time %}
-                <span class="badge badge-warning"><i class="fas fa-clock"></i> In</span>
+                <span class="badge badge-success"><i class="fas fa-circle-check"></i> Asistió</span>
               {% else %}
                 <span class="badge badge-muted">—</span>
               {% endif %}
@@ -192,7 +244,7 @@
         {% empty %}
         <!-- Mensaje de sin registros - ícono y texto en gris (--text2) -->
         <tr>
-          <td colspan="10" style="text-align:center;color:var(--text2);padding:40px">
+          <td colspan="11" style="text-align:center;color:var(--text2);padding:40px">
             <i class="fas fa-calendar-xmark" style="font-size:1.5rem;display:block;margin-bottom:8px"></i>
             No records found.
           </td>

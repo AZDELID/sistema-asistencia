@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% block title %}Editar {{ student.name }} — FaceAttend AI{% endblock %}
+{% block topbar_title %}Editar Personal{% endblock %}
+{% block nav_students %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+  .edit-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media(max-width:720px){ .edit-layout { grid-template-columns: 1fr; } }
+
+  .photo-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; text-align: center;
+  }
+  .photo-card img {
+    width: 130px; height: 130px; border-radius: 50%; object-fit: cover;
+    border: 3px solid var(--neon); box-shadow: 0 0 18px rgba(0,245,196,0.18);
+    margin-bottom: 12px;
+  }
+  .photo-placeholder {
+    width: 130px; height: 130px; border-radius: 50%;
+    background: var(--surface2); display: flex; align-items: center;
+    justify-content: center; margin: 0 auto 12px; font-size: 2.5rem;
+    color: var(--text2);
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media(max-width:540px){ .form-grid { grid-template-columns: 1fr; } }
+  .full-col { grid-column: 1 / -1; }
+
+  .file-label {
+    display: block; cursor: pointer;
+    border: 2px dashed var(--border); border-radius: 8px;
+    padding: 12px 16px; font-size: 0.84rem; color: var(--text2);
+    transition: border-color var(--trans);
+    text-align: center;
+  }
+  .file-label:hover { border-color: var(--neon); color: var(--neon); }
+  #img-preview {
+    width: 100%; max-height: 160px; object-fit: cover;
+    border-radius: 8px; margin-top: 10px; display: none;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1><i class="fas fa-user-pen"></i> Editar Perfil</h1>
+  <p>Actualiza los datos personales y laborales de {{ student.name }}.</p>
+</div>
+
+{% if messages %}
+  {% for msg in messages %}
+  <div style="padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.84rem;
+    {% if msg.tags == 'success' %}background:rgba(0,245,196,0.08);border:1px solid rgba(0,245,196,0.2);color:var(--neon)
+    {% elif msg.tags == 'error' %}background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);color:var(--danger)
+    {% else %}background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.2);color:var(--neon3){% endif %}">
+    {{ msg }}
+  </div>
+  {% endfor %}
+{% endif %}
+
+<div class="edit-layout">
+  <!-- Foto actual -->
+  <div class="photo-card">
+    {% if student.image %}
+      <img src="{{ student.image.url }}" alt="{{ student.name }}" id="current-photo">
+    {% else %}
+      <div class="photo-placeholder"><i class="fas fa-user"></i></div>
+    {% endif %}
+    <div style="font-weight:700;font-size:1rem;margin-bottom:4px">{{ student.name }}</div>
+    <div style="font-size:0.78rem;color:var(--text2)">
+      {% if student.position %}{{ student.position }}{% endif %}
+      {% if student.area %} · {{ student.area }}{% endif %}
+    </div>
+    <div style="margin-top:10px">
+      {% if student.authorized %}
+        <span class="badge badge-success"><i class="fas fa-circle-check"></i> Autorizado</span>
+      {% else %}
+        <span class="badge badge-warning"><i class="fas fa-clock"></i> Pendiente</span>
+      {% endif %}
+    </div>
+    <div style="margin-top:14px;font-size:0.75rem;color:var(--text2)">
+      <i class="fas fa-info-circle"></i> La autorización se gestiona por separado.
+    </div>
+  </div>
+
+  <!-- Formulario -->
+  <div class="glass-card">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <div class="form-grid">
+        <!-- Nombre -->
+        <div class="full-col">
+          <label class="form-label">Nombre completo <span style="color:var(--danger)">*</span></label>
+          <input type="text" name="name" class="form-control"
+                 value="{{ student.name }}" required maxlength="255">
+        </div>
+
+        <!-- DNI -->
+        <div>
+          <label class="form-label">DNI / Documento</label>
+          <input type="text" name="dni" class="form-control"
+                 value="{{ student.dni }}" maxlength="20"
+                 placeholder="Ej. 12345678">
+        </div>
+
+        <!-- Email -->
+        <div>
+          <label class="form-label">Correo electrónico</label>
+          <input type="email" name="email" class="form-control"
+                 value="{{ student.email }}" maxlength="255"
+                 placeholder="correo@empresa.com">
+        </div>
+
+        <!-- Teléfono -->
+        <div>
+          <label class="form-label">Teléfono / Celular</label>
+          <input type="text" name="phone_number" class="form-control"
+                 value="{{ student.phone_number }}" maxlength="15"
+                 placeholder="987654321">
+        </div>
+
+        <!-- Cargo -->
+        <div>
+          <label class="form-label">Cargo / Puesto</label>
+          <input type="text" name="position" class="form-control"
+                 value="{{ student.position }}" maxlength="150"
+                 placeholder="Operador, Supervisor…">
+        </div>
+
+        <!-- Área -->
+        <div>
+          <label class="form-label">Área / Departamento</label>
+          <input type="text" name="area" class="form-control"
+                 value="{{ student.area }}" maxlength="150"
+                 placeholder="Producción, RRHH…">
+        </div>
+
+        <!-- Horario -->
+        <div>
+          <label class="form-label">Horario de trabajo</label>
+          <input type="text" name="work_schedule" class="form-control"
+                 value="{{ student.work_schedule }}" maxlength="100"
+                 placeholder="8:00 – 17:00">
+        </div>
+
+        <!-- Clase / Grupo -->
+        <div>
+          <label class="form-label">Grupo / Turno</label>
+          <input type="text" name="student_class" class="form-control"
+                 value="{{ student.student_class }}" maxlength="100"
+                 placeholder="Turno A, Grupo 1…">
+        </div>
+
+        <!-- Foto -->
+        <div class="full-col">
+          <label class="form-label">Foto (opcional — reemplaza la actual si se sube)</label>
+          <label class="file-label" id="file-label">
+            <i class="fas fa-camera" id="file-label-icon" style="margin-right:6px"></i>
+            <span id="file-label-text">Seleccionar nueva foto&hellip;</span>
+            <input type="file" name="image" accept="image/*" style="display:none"
+                   onchange="previewPhoto(this)">
+          </label>
+          <img id="img-preview" alt="Vista previa">
+        </div>
+      </div>
+
+      <hr class="divider" style="margin:20px 0">
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-floppy-disk"></i> Guardar cambios
+        </button>
+        <a href="{% url 'student-detail' pk=student.pk %}" class="btn btn-secondary">
+          <i class="fas fa-arrow-left"></i> Cancelar
+        </a>
+        <a href="{% url 'student-authorize' pk=student.pk %}" class="btn btn-secondary"
+           style="margin-left:auto">
+          <i class="fas fa-shield-halved"></i> Gestionar autorización
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function previewPhoto(input) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('img-preview');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+  };
+  reader.readAsDataURL(input.files[0]);
+  document.getElementById('file-label-icon').className = 'fas fa-check';
+  document.getElementById('file-label-icon').style.color = 'var(--neon)';
+  document.getElementById('file-label-text').textContent = input.files[0].name;
+}
+</script>
+{% endblock %}

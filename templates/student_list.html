@@ -1,12 +1,62 @@
 {% extends 'base.html' %}
-{% block title %}Students — FaceAttend AI{% endblock %}
-{% block topbar_title %}Manage Students{% endblock %}
+{% block title %}Personal — FaceAttend AI{% endblock %}
+{% block topbar_title %}Gestión de Personal{% endblock %}
 {% block nav_students %}active{% endblock %}
 
+{% block extra_head %}
+<style>
+  .dni-badge {
+    font-family: monospace;
+    font-size: 0.78rem;
+    color: var(--neon2);
+    background: var(--surface2);
+    padding: 2px 7px;
+    border-radius: 5px;
+    letter-spacing: 0.5px;
+  }
+  .name-unknown {
+    color: var(--text2);
+    font-style: italic;
+    font-weight: 400;
+  }
+  .search-wrap { position:relative; }
+  .search-wrap i { position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:0.78rem;pointer-events:none; }
+  .search-wrap input { padding-left:28px; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="page-header">
-  <h1><i class="fas fa-users"></i> Student List</h1>
-  <p>Review authorizations and QR access for each registered student.</p>
+<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1><i class="fas fa-users"></i> Personal Registrado</h1>
+    <p>Gestiona autorizaciones, QR y perfiles del personal.</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="{% url 'capture_student' %}" class="btn btn-primary btn-sm">
+      <i class="fas fa-camera"></i> Registrar
+    </a>
+    <a href="{% url 'import_students' %}" class="btn btn-secondary btn-sm">
+      <i class="fas fa-file-import"></i> Importar
+    </a>
+  </div>
+</div>
+
+<!-- Filtro rápido -->
+<div class="glass-card" style="padding:14px 18px;margin-bottom:16px">
+  <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <div class="search-wrap">
+      <i class="fas fa-search"></i>
+      <input type="text" name="q" class="form-control" placeholder="Nombre o DNI…"
+             value="{{ request.GET.q }}" style="width:220px">
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Filtrar</button>
+    {% if request.GET.q %}
+      <a href="{% url 'student-list' %}" class="btn btn-secondary btn-sm"><i class="fas fa-xmark"></i> Limpiar</a>
+    {% endif %}
+    <span style="margin-left:auto;font-size:0.8rem;color:var(--text2);align-self:center">
+      {{ students|length }} persona(s)
+    </span>
+  </form>
 </div>
 
 <div class="glass-card">
@@ -14,13 +64,14 @@
     <table>
       <thead>
         <tr>
-          <th>Photo</th>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Class</th>
-          <th>Face Auth</th>
+          <th>Foto</th>
+          <th>DNI</th>
+          <th>Nombre</th>
+          <th>Cargo</th>
+          <th>Área</th>
+          <th>Face</th>
           <th>QR</th>
-          <th>Actions</th>
+          <th>Acciones</th>
         </tr>
       </thead>
       <tbody>
@@ -28,44 +79,70 @@
         <tr>
           <td>
             {% if student.image %}
-              <img src="{{ student.image.url }}" alt="{{ student.name }}" class="avatar">
+              <img src="{{ student.image.url }}" alt="{{ student.display_name }}" class="avatar">
             {% else %}
               <div class="avatar" style="background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--text2)">
                 <i class="fas fa-user" style="font-size:.85rem"></i>
               </div>
             {% endif %}
           </td>
-          <td style="font-weight:600">{{ student.name }}</td>
-          <td style="color:var(--text2);font-size:0.83rem">{{ student.email }}</td>
-          <td>{{ student.student_class }}</td>
+
+          <!-- DNI — columna propia -->
+          <td>
+            {% if student.dni %}
+              <span class="dni-badge">{{ student.dni }}</span>
+            {% else %}
+              <span style="color:var(--text2);font-size:0.78rem">—</span>
+            {% endif %}
+          </td>
+
+          <!-- Nombre — solo nombre real, nunca el DNI -->
+          <td style="font-weight:600">
+            {% if student.display_name == 'Desconocido' %}
+              <span class="name-unknown"><i class="fas fa-circle-question" style="font-size:0.75rem;margin-right:4px"></i>Desconocido</span>
+            {% else %}
+              {{ student.display_name }}
+            {% endif %}
+          </td>
+
+          <td style="color:var(--text2);font-size:0.83rem">{{ student.position|default:"—" }}</td>
+          <td style="color:var(--text2);font-size:0.83rem">{{ student.area|default:"—" }}</td>
+
           <td>
             {% if student.authorized %}
-              <span class="badge badge-success"><i class="fas fa-circle-check"></i> Yes</span>
+              <span class="badge badge-success"><i class="fas fa-circle-check"></i> Sí</span>
             {% else %}
-              <span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>
+              <span class="badge badge-warning"><i class="fas fa-clock"></i> Pendiente</span>
             {% endif %}
           </td>
+
           <td>
             {% if student.qr_code and student.qr_active %}
-              <span class="badge badge-success"><i class="fas fa-qrcode"></i> Active</span>
+              <span class="badge badge-success"><i class="fas fa-qrcode"></i> Activo</span>
             {% elif student.qr_code and not student.qr_active %}
-              <span class="badge badge-danger"><i class="fas fa-ban"></i> Disabled</span>
+              <span class="badge badge-danger"><i class="fas fa-ban"></i> Inactivo</span>
             {% else %}
-              <span class="badge badge-muted"><i class="fas fa-minus"></i> None</span>
+              <span class="badge badge-muted"><i class="fas fa-minus"></i> Sin QR</span>
             {% endif %}
           </td>
+
           <td>
-            <a href="{% url 'student-authorize' pk=student.pk %}" class="btn btn-secondary btn-sm">
-              <i class="fas fa-shield-halved"></i> Manage
-            </a>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <a href="{% url 'student-edit' pk=student.pk %}" class="btn btn-primary btn-sm">
+                <i class="fas fa-user-pen"></i> Editar
+              </a>
+              <a href="{% url 'student-detail' pk=student.pk %}" class="btn btn-secondary btn-sm">
+                <i class="fas fa-eye"></i>
+              </a>
+            </div>
           </td>
         </tr>
         {% empty %}
         <tr>
-          <td colspan="7" style="text-align:center;color:var(--text2);padding:40px">
+          <td colspan="8" style="text-align:center;color:var(--text2);padding:40px">
             <i class="fas fa-users-slash" style="font-size:1.5rem;display:block;margin-bottom:8px"></i>
-            No students yet.
-            <a href="{% url 'capture_student' %}" style="color:var(--neon);text-decoration:none;margin-left:6px">Register one →</a>
+            No hay personal registrado.
+            <a href="{% url 'capture_student' %}" style="color:var(--neon);text-decoration:none;margin-left:6px">Registrar →</a>
           </td>
         </tr>
         {% endfor %}

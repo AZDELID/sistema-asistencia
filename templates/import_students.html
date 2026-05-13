@@ -45,8 +45,8 @@
 
 {% block content %}
 <div class="page-header">
-  <h1><i class="fas fa-file-import"></i> Import Personnel List</h1>
-  <p>Upload a CSV or Excel (.xlsx) file to bulk-register personnel with auto-generated QR codes.</p>
+  <h1><i class="fas fa-file-import"></i> Importar Personal / Asistencias</h1>
+  <p>Sube un archivo CSV o Excel (.xlsx) — de nómina, biométrico o de asistencia.</p>
 </div>
 
 <div class="import-grid">
@@ -65,15 +65,32 @@
 
       <input type="file" id="file-input" name="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="showFileName(this)">
 
-      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+      <!-- Opción de marcar asistencia -->
+      <div style="margin-top:18px;padding:12px 16px;background:var(--surface2);
+                  border-radius:10px;border:1px solid var(--border);display:flex;
+                  align-items:center;gap:12px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1">
+          <input type="checkbox" name="mark_attendance" checked
+                 style="width:18px;height:18px;accent-color:var(--neon);cursor:pointer">
+          <span>
+            <strong style="font-size:0.88rem">Registrar asistencia al importar</strong><br>
+            <span style="font-size:0.76rem;color:var(--text2)">
+              Si el archivo incluye columnas de fecha/hora, se usa la fecha real del archivo.
+              Si no las tiene y esta opción está activa, se registra la hora actual.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
         <button type="submit" class="btn btn-primary" id="submit-btn" disabled>
-          <i class="fas fa-upload"></i> Import
+          <i class="fas fa-upload"></i> Importar
         </button>
         <a href="{% url 'home' %}" class="btn btn-secondary">
-          <i class="fas fa-xmark"></i> Cancel
+          <i class="fas fa-xmark"></i> Cancelar
         </a>
         <a href="#" onclick="downloadTemplate()" class="btn btn-secondary" style="margin-left:auto">
-          <i class="fas fa-download"></i> Download Template CSV
+          <i class="fas fa-download"></i> Descargar plantilla CSV
         </a>
       </div>
     </form>
@@ -81,13 +98,13 @@
     {% if messages %}
     <hr class="divider">
     {% for msg in messages %}
-    <div class="toast-inline {% if msg.tags == 'success' %}success{% elif msg.tags == 'error' %}error{% else %}info{% endif %}"
-         style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:8px;margin-top:8px;
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:8px;margin-top:8px;
                 {% if msg.tags == 'success' %}background:rgba(0,245,196,0.08);border:1px solid rgba(0,245,196,0.2);
                 {% elif msg.tags == 'error' %}background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);
+                {% elif msg.tags == 'info' %}background:rgba(124,111,247,0.08);border:1px solid rgba(124,111,247,0.25);
                 {% else %}background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.2);{% endif %}">
-      <i class="fas {% if msg.tags == 'success' %}fa-circle-check{% elif msg.tags == 'error' %}fa-circle-xmark{% else %}fa-triangle-exclamation{% endif %}"
-         style="{% if msg.tags == 'success' %}color:var(--neon){% elif msg.tags == 'error' %}color:var(--danger){% else %}color:var(--neon3){% endif %};margin-top:2px;flex-shrink:0"></i>
+      <i class="fas {% if msg.tags == 'success' %}fa-circle-check{% elif msg.tags == 'error' %}fa-circle-xmark{% elif msg.tags == 'info' %}fa-circle-info{% else %}fa-triangle-exclamation{% endif %}"
+         style="{% if msg.tags == 'success' %}color:var(--neon){% elif msg.tags == 'error' %}color:var(--danger){% elif msg.tags == 'info' %}color:var(--neon2){% else %}color:var(--neon3){% endif %};margin-top:2px;flex-shrink:0"></i>
       <span style="font-size:0.84rem">{{ msg }}</span>
     </div>
     {% endfor %}
@@ -101,27 +118,117 @@
         <i class="fas fa-table" style="color:var(--neon)"></i> Expected Columns
       </div>
 
+      <!-- Dos modos explicados -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;font-size:0.78rem">
+        <div style="padding:8px 10px;background:rgba(0,245,196,0.06);border:1px solid rgba(0,245,196,0.2);border-radius:8px">
+          <strong style="color:var(--neon)"><i class="fas fa-id-card"></i> Nómina de personal</strong><br>
+          <span style="color:var(--text2)">Columnas: <code>dni</code> + <code>nombre</code> + campos opcionales.<br>
+          Crea personas nuevas en el sistema.</span>
+        </div>
+        <div style="padding:8px 10px;background:rgba(124,111,247,0.06);border:1px solid rgba(124,111,247,0.2);border-radius:8px">
+          <strong style="color:var(--neon2)"><i class="fas fa-clock"></i> Reporte de asistencias</strong><br>
+          <span style="color:var(--text2)">Columnas: <code>dni</code> + <code>fecha</code> + <code>hora</code>.<br>
+          Asocia registros a personas ya existentes.</span>
+        </div>
+      </div>
+
       <table class="col-table">
         <thead>
-          <tr><th>Column name</th><th>Required?</th></tr>
+          <tr><th>Campo</th><th>Nombres de columna aceptados</th><th>¿Obligatorio?</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>name</code> / <code>nombre</code></td><td><span class="req">Yes</span></td></tr>
-          <tr><td><code>email</code> / <code>correo</code></td><td style="color:var(--text2)">Optional</td></tr>
-          <tr><td><code>phone_number</code> / <code>telefono</code></td><td style="color:var(--text2)">Optional</td></tr>
-          <tr><td><code>position</code> / <code>cargo</code></td><td style="color:var(--text2)">Optional</td></tr>
-          <tr><td><code>area</code> / <code>área</code></td><td style="color:var(--text2)">Optional</td></tr>
-          <tr><td><code>work_schedule</code> / <code>horario</code></td><td style="color:var(--text2)">Optional</td></tr>
-          <tr><td><code>student_class</code> / <code>clase</code></td><td style="color:var(--text2)">Optional</td></tr>
+          <tr>
+            <td><strong style="color:var(--neon)">DNI</strong></td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>dni</code> <code>cedula</code> <code>documento</code>
+              <code>rut</code> <code>id</code> <code>cod</code>
+              <code>nro documento</code> <code>nrodocumento</code>
+              <code>num. documento</code>
+            </td>
+            <td><span class="req">Sí</span></td>
+          </tr>
+          <tr>
+            <td>Nombre</td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>nombre</code> <code>nombres</code> <code>name</code>
+              <code>apellidos y nombres</code> <code>apellidos</code>
+              <code>trabajador</code> <code>personal</code> <code>empleado</code>
+              <code>colaborador</code> <code>full_name</code>
+            </td>
+            <td style="color:var(--text2)">Opcional</td>
+          </tr>
+          <tr>
+            <td>Fecha</td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>fecha</code> <code>date</code> <code>dia</code>
+              <code>fecha entrada</code> <code>fecha ingreso</code>
+            </td>
+            <td style="color:var(--text2)">Para asistencia</td>
+          </tr>
+          <tr>
+            <td>Hora entrada</td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>hora entrada</code> <code>hora_entrada</code> <code>entrada</code>
+              <code>time_in</code> <code>checkin</code> <code>hora inicio</code>
+            </td>
+            <td style="color:var(--text2)">Para asistencia</td>
+          </tr>
+          <tr>
+            <td>Hora salida</td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>hora salida</code> <code>hora_salida</code> <code>salida</code>
+              <code>time_out</code> <code>checkout</code> <code>hora fin</code>
+            </td>
+            <td style="color:var(--text2)">Opcional</td>
+          </tr>
+          <tr>
+            <td>Fecha+Hora</td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>fecha hora</code> <code>datetime</code> <code>timestamp</code>
+              <code>fecha y hora</code> <code>fecha/hora</code>
+            </td>
+            <td style="color:var(--text2)">Alternativa</td>
+          </tr>
+          <tr>
+            <td>Tipo (E/S)</td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>tipo</code> <code>event</code> <code>e/s</code>
+              <code>flag</code> <code>movimiento</code>
+              &nbsp;<em style="color:var(--text2)">valores: E/S · 0/1 · IN/OUT</em>
+            </td>
+            <td style="color:var(--text2)">Opcional</td>
+          </tr>
+          <tr>
+            <td>Email</td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>email</code> <code>correo</code> <code>correo electronico</code> <code>mail</code>
+            </td>
+            <td style="color:var(--text2)">Opcional</td>
+          </tr>
+          <tr>
+            <td>Cargo · Área · Horario · Turno</td>
+            <td style="font-size:0.75rem;line-height:1.8">
+              <code>cargo</code> <code>position</code> &nbsp;
+              <code>area</code> <code>área</code> &nbsp;
+              <code>horario</code> <code>work_schedule</code> &nbsp;
+              <code>turno</code> <code>grupo</code>
+            </td>
+            <td style="color:var(--text2)">Opcional</td>
+          </tr>
         </tbody>
       </table>
 
-      <div style="margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:8px;font-size:0.78rem;color:var(--text2);line-height:1.6">
-        <strong style="color:var(--neon)">Notes:</strong><br>
-        All imported personnel are <strong>auto-authorized</strong> and receive a QR code.<br>
-        Rows with missing <em>name</em> are skipped.<br>
-        Duplicate emails are skipped with a warning.<br>
-        The file encoding must be UTF-8 (or UTF-8 BOM for Excel-exported CSVs).
+      <div style="margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:8px;font-size:0.78rem;color:var(--text2);line-height:1.8">
+        <strong style="color:var(--danger)">DNI obligatorio:</strong>
+        Filas sin DNI se omiten con aviso.<br>
+        <strong style="color:var(--neon)">Nombre opcional:</strong>
+        Si no hay nombre, la fila se procesa igual (solo asistencia).<br>
+        <strong style="color:var(--neon2)">Fecha real:</strong>
+        La fecha y hora se toman del archivo — nunca se reemplaza con la hora actual.<br>
+        <strong style="color:var(--neon3)">Sin hora de salida:</strong>
+        Se registra la asistencia con entrada; la salida queda en blanco.<br>
+        <strong style="color:var(--text)">DNI no registrado:</strong>
+        Se reporta como aviso — no se inventa un nombre.
       </div>
     </div>
   </div>
@@ -151,11 +258,12 @@ dz.addEventListener('drop', ev => {
 // Download template CSV
 function downloadTemplate() {
   const rows = [
-    ['name','email','phone_number','position','area','work_schedule','student_class'],
-    ['Juan Pérez','juan@empresa.com','987654321','Operador','Producción','8:00-17:00','Turno A'],
-    ['María López','maria@empresa.com','912345678','Supervisora','RRHH','9:00-18:00','Turno B'],
+    ['dni','nombre','email','telefono','cargo','area','horario','turno'],
+    ['12345678','Juan Pérez','juan@empresa.com','987654321','Operador','Producción','8:00-17:00','Turno A'],
+    ['87654321','María López','maria@empresa.com','912345678','Supervisora','RRHH','9:00-18:00','Turno B'],
+    ['99999999','','','','','','',''],
   ];
-  const csv = rows.map(r => r.join(',')).join('\n');
+  const csv = rows.map(r => r.map(v => v.includes(',') ? `"${v}"` : v).join(',')).join('\n');
   const blob = new Blob(['﻿' + csv], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

@@ -16,6 +16,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.files.base import ContentFile
 from django.db import IntegrityError
+from django.db.models import Q
 from django.http import HttpResponse, StreamingHttpResponse, JsonResponse, FileResponse, Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -686,31 +687,34 @@ def selfie_success(request):
 # ── Attendance list ───────────────────────────────────────────────────────────
 
 def _attendance_queryset(request):
-    """Shared filter logic for the attendance list and export views."""
+    """Single-query attendance filter — O(1) DB round-trips via select_related."""
+    import datetime as _dt
     search   = request.GET.get('search', '').strip()
     area     = request.GET.get('area', '').strip()
     date_val = request.GET.get('attendance_date', '').strip()
     date_from= request.GET.get('date_from', '').strip()
     date_to  = request.GET.get('date_to', '').strip()
 
-    students = Student.objects.all()
-    if search:
-        students = students.filter(name__icontains=search)
-    if area:
-        students = students.filter(area__icontains=area)
+    qs = Attendance.objects.select_related('student').order_by('-date', '-check_in_time')
 
-    rows = []
-    for student in students:
-        records = Attendance.objects.filter(student=student)
-        if date_val:
-            records = records.filter(date=date_val)
-        elif date_from:
-            records = records.filter(date__gte=date_from)
-            if date_to:
-                records = records.filter(date__lte=date_to)
-        for r in records.order_by('-date', '-check_in_time'):
-            rows.append((student, r))
-    return rows
+    if search:
+        qs = qs.filter(Q(student__name__icontains=search) | Q(student__dni__icontains=search))
+    if area:
+        qs = qs.filter(student__area__icontains=area)
+
+    if date_val:
+        # Specific single date
+        qs = qs.filter(date=date_val)
+    else:
+        # date_from and date_to are applied independently — either one alone is valid
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        # No default date limit — show all records when no filter is active so
+        # historical imports always appear. The template shows an informational note.
+
+    return [(att.student, att) for att in qs]
 
 
 @login_required
@@ -753,6 +757,7 @@ def student_attendance_list(request):
         'date_filter':   date_val,
         'date_from':     date_from,
         'date_to':       date_to,
+        'today':         _today,
         'month_choices': month_choices,
         'year_choices':  list(range(_today.year - 3, _today.year + 2)),
         'current_month': _cur_month,
@@ -768,18 +773,24 @@ def export_attendance_csv(request):
     response['Content-Disposition'] = 'attachment; filename="asistencia.csv"'
     response.write('﻿')  # BOM so Excel opens it correctly as UTF-8
     writer = csv.writer(response)
-    writer.writerow(['Nombre', 'Cargo', 'Área', 'Horario', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Estado'])
+    writer.writerow(['DNI', 'Nombre', 'Cargo', 'Área', 'Horario', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Estado'])
     for student, record in rows:
-        estado = 'Completo' if (record.check_in_time and record.check_out_time) else 'Solo entrada'
+        if record.check_in_time and record.check_out_time:
+            estado = 'Completo'
+        elif record.check_in_time:
+            estado = 'Asistió'
+        else:
+            estado = '—'
         writer.writerow([
-            student.name,
+            student.dni or '',
+            student.display_name,
             student.position,
             student.area,
             student.work_schedule,
             str(record.date),
             record.check_in_time.strftime('%H:%M:%S') if record.check_in_time else '',
-            record.check_out_time.strftime('%H:%M:%S') if record.check_out_time else '',
-            record.calculate_duration() or '',
+            record.check_out_time.strftime('%H:%M:%S') if record.check_out_time else '—',
+            record.calculate_duration() or '—',
             estado,
         ])
     return response
@@ -832,9 +843,9 @@ def export_attendance_excel(request):
         students_data.append({
             'number':    idx,
             'dni':       student.dni or '',
-            'name':      student.name,
+            'name':      student.display_name,
             'position':  student.position or '',
-            'condition': 'Contratado',   # default; extend model if needed
+            'condition': 'Contratado',
             'attendance': attended_days,
         })
 
@@ -890,7 +901,11 @@ def home(request):
 @login_required
 @user_passes_test(is_admin)
 def student_list(request):
-    return render(request, 'student_list.html', {'students': Student.objects.all()})
+    qs = Student.objects.all().order_by('name')
+    q = request.GET.get('q', '').strip()
+    if q:
+        qs = qs.filter(Q(name__icontains=q) | Q(dni__icontains=q))
+    return render(request, 'student_list.html', {'students': qs})
 
 
 @login_required
@@ -898,6 +913,28 @@ def student_list(request):
 def student_detail(request, pk):
     student = get_object_or_404(Student, pk=pk)
     return render(request, 'student_detail.html', {'student': student})
+
+
+@login_required
+@user_passes_test(is_admin)
+def student_edit(request, pk):
+    student = get_object_or_404(Student, pk=pk)
+    if request.method == 'POST':
+        student.name          = request.POST.get('name', '').strip() or student.name
+        student.email         = request.POST.get('email', '').strip()
+        student.phone_number  = request.POST.get('phone_number', '').strip()[:15]
+        student.dni           = request.POST.get('dni', '').strip()[:20]
+        student.position      = request.POST.get('position', '').strip()[:150]
+        student.area          = request.POST.get('area', '').strip()[:150]
+        student.work_schedule = request.POST.get('work_schedule', '').strip()[:100]
+        student.student_class = request.POST.get('student_class', '').strip()[:100]
+        if 'image' in request.FILES:
+            student.image = request.FILES['image']
+            invalidate_embedding_cache()
+        student.save()
+        messages.success(request, f'Perfil de {student.name} actualizado.')
+        return redirect('student-detail', pk=pk)
+    return render(request, 'student_edit.html', {'student': student})
 
 
 @login_required
@@ -1032,67 +1069,492 @@ def camera_config_delete(request, pk):
 
 @login_required
 @user_passes_test(is_admin)
-def import_students(request):
+def import_students(request):  # noqa: C901
     if request.method != 'POST':
         return render(request, 'import_students.html')
 
     uploaded = request.FILES.get('file')
     if not uploaded:
-        messages.error(request, 'No file selected.')
+        messages.error(request, 'No se seleccionó ningún archivo.')
         return redirect('import_students')
 
     ext = uploaded.name.rsplit('.', 1)[-1].lower()
-    raw_rows = []
+    raw_rows: list  = []
+    all_headers: list = []
 
+    # ── 1. Parse file ─────────────────────────────────────────────────────
     if ext == 'csv':
-        content = uploaded.read().decode('utf-8-sig')
-        reader  = csv.DictReader(io.StringIO(content))
-        raw_rows = [{k.strip().lower(): (v or '').strip() for k, v in row.items()} for row in reader]
+        try:
+            content = uploaded.read().decode('utf-8-sig')
+            reader  = csv.DictReader(io.StringIO(content))
+            all_headers = [f.strip().lower() for f in (reader.fieldnames or [])]
+            raw_rows = [
+                {k.strip().lower(): str(v or '').strip() for k, v in row.items()}
+                for row in reader
+                if any(str(v or '').strip() for v in row.values())
+            ]
+        except Exception as exc:
+            messages.error(request, f'Error leyendo CSV: {exc}')
+            return redirect('import_students')
+
     elif ext in ('xlsx', 'xls'):
         try:
             import openpyxl
-            wb = openpyxl.load_workbook(uploaded, read_only=True)
+            from datetime import datetime as _DT, date as _Date, time as _Time
+            wb = openpyxl.load_workbook(uploaded, read_only=True, data_only=True)
             ws = wb.active
-            headers = [str(c.value or '').strip().lower() for c in next(ws.iter_rows(max_row=1))]
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                if any(v for v in row):
-                    raw_rows.append({headers[i]: str(v or '').strip() for i, v in enumerate(row)})
+            all_xlsx = list(ws.iter_rows(values_only=True))
+            if not all_xlsx:
+                messages.error(request, 'El archivo está vacío.')
+                return redirect('import_students')
+            all_headers = [str(c or '').strip().lower() for c in all_xlsx[0]]
+
+            def _cell(val):
+                """Convert openpyxl native type → clean string without Excel artifacts."""
+                if val is None:
+                    return ''
+                if isinstance(val, _DT):
+                    return val.strftime('%Y-%m-%d %H:%M:%S')
+                if isinstance(val, _Date):
+                    return val.strftime('%Y-%m-%d')
+                if isinstance(val, _Time):
+                    return val.strftime('%H:%M:%S')
+                # Excel stores integers as float — strip the ".0" artifact
+                if isinstance(val, float):
+                    return str(int(val)) if val == int(val) else str(round(val, 6))
+                if isinstance(val, int):
+                    return str(val)
+                return str(val).strip()
+
+            for row in all_xlsx[1:]:
+                if any(v is not None and str(v).strip() for v in row):
+                    raw_rows.append({
+                        all_headers[i]: _cell(row[i] if i < len(row) else None)
+                        for i in range(len(all_headers))
+                    })
         except Exception as exc:
-            messages.error(request, f'Could not read Excel file: {exc}')
+            messages.error(request, f'Error leyendo Excel: {exc}')
             return redirect('import_students')
+
     else:
-        messages.error(request, 'Unsupported format. Upload CSV or XLSX.')
+        messages.error(request, 'Formato no soportado. Sube CSV o XLSX.')
         return redirect('import_students')
 
-    imported = 0
-    skipped  = []
+    if not raw_rows:
+        messages.error(request, 'El archivo no contiene filas de datos.')
+        return redirect('import_students')
+
+    # ── 2. Build column map ───────────────────────────────────────────────
+    import re as _re
+
+    def _is_generic(headers):
+        non_empty = [h for h in headers if h]
+        return bool(non_empty) and all(_re.match(r'^(col\d+|\d+)$', h) for h in non_empty)
+
+    def _col_type(vals):
+        sample = [v for v in vals if v][:10]
+        if not sample:
+            return 'empty'
+        # Normalize: strip float artifact before matching (e.g. "12345678.0" → "12345678")
+        def _strip_float(v):
+            m = _re.match(r'^(\d+)\.0+$', v.strip())
+            return m.group(1) if m else v.strip()
+        normed = [_strip_float(v) for v in sample]
+        # Pure integer 5-15 digits → DNI / employee code
+        if all(_re.match(r'^\d{5,15}$', v) for v in normed):
+            return 'dni'
+        # Combined date+time
+        if all(_re.search(r'\d{1,4}[/\-\.]\d{1,2}[/\-\.]\d{1,4}.{0,3}\d{1,2}:\d{2}', v)
+               for v in sample):
+            # Excel exports date-only cells as datetime(midnight) → classify as 'date'
+            if all(_re.search(r'\s00:00(:\d{2})?$', v) for v in sample):
+                return 'date'
+            return 'datetime'
+        # Pure date
+        if all(_re.match(r'^\d{1,4}[/\-\.]\d{1,2}[/\-\.]\d{1,4}$', v) for v in sample):
+            return 'date'
+        # Pure time HH:MM or HH:MM:SS
+        if all(_re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', v) for v in sample):
+            return 'time'
+        # In/out flag
+        if all(_re.match(r'^(E|S|0|1|IN|OUT|ENTRADA|SALIDA)$', v.upper()) for v in sample):
+            return 'flag'
+        # Text with no digits → name
+        if all(_re.match(r'^[^\d]+$', v) for v in sample):
+            return 'name'
+        return 'other'
+
+    NAME_AL     = ['name','nombre','nombres','nombre completo','nombrecompleto',
+                   'apellidos y nombres','apellidos_y_nombres','apellido y nombre',
+                   'apellidos','apellido','trabajador','personal','empleado',
+                   'full_name','fullname','colaborador','servidor']
+    DNI_AL      = ['dni','cedula','cédula','documento','rut','id','cod','codigo','código',
+                   'nro documento','nro. documento','nrodocumento',
+                   'numero documento','numero de documento','num. documento']
+    EMAIL_AL    = ['email','correo','correo electronico','correo electrónico','e-mail','mail']
+    PHONE_AL    = ['phone_number','telefono','teléfono','phone','cel','celular','movil','móvil']
+    CLASS_AL    = ['student_class','clase','class','grupo','group','turno']
+    POS_AL      = ['position','cargo','puesto','rol','role','job']
+    AREA_AL     = ['area','área','departamento','department','seccion','sección']
+    SCHED_AL    = ['work_schedule','horario','schedule','jornada']
+    DATE_AL     = ['fecha','date','dia','día','fecha_entrada','fecha entrada',
+                   'fecha acceso','fecha ingreso']
+    TIME_IN_AL  = ['hora entrada','hora_entrada','hora ingreso','hora_ingreso',
+                   'time_in','timein','check_in','checkin',
+                   'hora inicio','hora_inicio','h. entrada','h.entrada','entrada']
+    TIME_OUT_AL = ['hora salida','hora_salida','hora egreso','hora_egreso',
+                   'time_out','timeout','check_out','checkout',
+                   'hora fin','hora_fin','h. salida','h.salida','salida']
+    TIME_AL     = ['hora','time','hora_acceso','hora acceso','hora_evento']
+    DT_AL       = ['fecha hora','fecha_hora','datetime','timestamp',
+                   'fecha y hora','fecha_y_hora','fecha/hora']
+    FLAG_AL     = ['tipo','type','event','evento','e/s','in/out',
+                   'accion','acción','movimiento','flag','marca']
+
+    col_map: dict = {}
+
+    if _is_generic(all_headers):
+        col_vals  = {h: [r.get(h, '') for r in raw_rows] for h in all_headers}
+        col_types = {h: _col_type(vs) for h, vs in col_vals.items()}
+        logger.info('Import: encabezados genéricos — tipos: %s', col_types)
+
+        for h, t in col_types.items():
+            for typ, sem in [('dni','dni'),('name','name'),('datetime','datetime'),
+                             ('date','date'),('flag','flag')]:
+                if t == typ and sem not in col_map:
+                    col_map[sem] = h
+                    break
+
+        # Positional fallback: first col = identifier
+        # Rule: if col1 values are all numeric (even if _col_type said 'other') → DNI
+        if 'name' not in col_map and 'dni' not in col_map and all_headers:
+            h0    = all_headers[0]
+            vals0 = [v for v in col_vals.get(h0, []) if v]
+            # Strip float artifacts before checking
+            nums0 = [_re.sub(r'\.0+$', '', v.strip()) for v in vals0[:10]]
+            first_is_id = bool(nums0) and all(_re.match(r'^\d+$', v) for v in nums0)
+            col_map['dni' if first_is_id else 'name'] = h0
+            if len(all_headers) > 1:
+                h1 = all_headers[1]
+                if col_types.get(h1) == 'name' and 'name' not in col_map:
+                    col_map['name'] = h1
+
+        if 'name' not in col_map and 'dni' in col_map:
+            for h in all_headers:
+                if h not in col_map.values() and col_types.get(h) == 'name':
+                    col_map['name'] = h
+                    break
+
+        # Assign time columns: 2+ time cols → time_in + time_out
+        time_cols = [h for h, t in col_types.items()
+                     if t == 'time' and h not in col_map.values()]
+        if len(time_cols) >= 2:
+            col_map['time_in']  = time_cols[0]
+            col_map['time_out'] = time_cols[1]
+        elif time_cols:
+            col_map['time'] = time_cols[0]
+
+        logger.info('Import: col_map resuelto: %s', col_map)
+    else:
+        row_keys = set(raw_rows[0].keys()) if raw_rows else set()
+        for sem, aliases in [
+            ('name', NAME_AL), ('dni', DNI_AL), ('email', EMAIL_AL),
+            ('phone', PHONE_AL), ('class', CLASS_AL), ('position', POS_AL),
+            ('area', AREA_AL), ('schedule', SCHED_AL),
+            ('date', DATE_AL), ('time_in', TIME_IN_AL), ('time_out', TIME_OUT_AL),
+            ('time', TIME_AL), ('datetime', DT_AL), ('flag', FLAG_AL),
+        ]:
+            for a in aliases:
+                if a in row_keys:
+                    col_map[sem] = a
+                    break
+
+    def _g(row, sem):
+        key = col_map.get(sem, '')
+        return row.get(key, '').strip() if key else ''
+
+    def _norm_id(v):
+        """Strip Excel float artifact: '12345678.0' → '12345678'."""
+        v = (v or '').strip()
+        m = _re.match(r'^(\d+)\.0+$', v)
+        return m.group(1) if m else v
+
+    # Log the resolved column map and a sample row for post-import debugging
+    _first_row_preview = dict(list(raw_rows[0].items())[:8]) if raw_rows else {}
+    logger.info('Import: col_map=%s | primera_fila=%s', col_map, _first_row_preview)
+
+    # ── 3. Date/time parsing helpers ─────────────────────────────────────
+    _DT_FMTS = (
+        '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M',
+        '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M',
+        '%d-%m-%Y %H:%M:%S', '%d-%m-%Y %H:%M',
+        '%Y/%m/%d %H:%M:%S', '%Y/%m/%d %H:%M',
+        '%d/%m/%Y',          '%Y-%m-%d',        '%d-%m-%Y',
+    )
+
+    def _parse_str(s):
+        """Parse any date/datetime string → aware datetime, or None."""
+        if not s:
+            return None
+        s = s.strip()
+        # Strip microseconds (e.g. "2024-01-15 08:30:00.123456" → "2024-01-15 08:30:00")
+        s = _re.sub(r'\.\d+$', '', s)
+        for fmt in _DT_FMTS:
+            try:
+                return timezone.make_aware(datetime.strptime(s, fmt))
+            except (ValueError, OverflowError):
+                continue
+        return None
+
+    def _date_part(s):
+        """Return only the YYYY-MM-DD portion of a date or datetime string.
+
+        openpyxl converts Excel date-only cells to datetime(midnight), so _cell()
+        produces "2024-05-10 00:00:00" for what should be just a date column.
+        Splitting on whitespace gives us the pure date regardless.
+        """
+        return s.split()[0] if s else ''
+
+    def _parse_row_times(row):
+        """Return (check_in_dt, check_out_dt) — either/both may be None.
+
+        Rule: a single time value ALWAYS goes to check_in.  Only Format B
+        (explicit separate time_in + time_out columns) can set check_out
+        from the file.  Flag columns are intentionally ignored — '1' / 'S'
+        in a tipo/evento column caused the time to land in check_out_time
+        (SALIDA) instead of check_in_time (ENTRADA).
+        """
+        # Format B: file has explicit time_in and/or time_out columns
+        if 'time_in' in col_map or 'time_out' in col_map:
+            dt_raw = _g(row, 'datetime')
+            d_raw  = _g(row, 'date')
+            date_s = _date_part(d_raw) or _date_part(dt_raw)
+            in_s   = _g(row, 'time_in')
+            out_s  = _g(row, 'time_out')
+            check_in  = _parse_str(f'{date_s} {in_s}'.strip()) if date_s and in_s  else None
+            check_out = _parse_str(f'{date_s} {out_s}'.strip()) if date_s and out_s else None
+            # Always promote: if a row produces no check_in but has a check_out
+            # (cell was empty, or only a time_out column exists in the file),
+            # treat that lone time as check_in.  Two real values are kept as-is.
+            if check_in is None and check_out is not None:
+                check_in, check_out = check_out, None
+            return check_in, check_out
+
+        # Format A / single-column: one timestamp per row.
+        # The time ALWAYS becomes check_in_time — flag column is ignored to avoid
+        # "1" / "S" values (from tipo/evento/movimiento columns) being misread as
+        # check_out events.
+        dt_raw = _g(row, 'datetime')
+        d      = _g(row, 'date')
+        t      = _g(row, 'time')
+
+        if t:
+            date_part = _date_part(dt_raw) or _date_part(d)
+            dt_s = f'{date_part} {t}'.strip() if date_part else t
+        elif dt_raw:
+            dt_s = dt_raw
+        elif d:
+            dt_s = d
+        else:
+            dt_s = ''
+
+        dt = _parse_str(dt_s)
+        if dt is None:
+            return None, None
+        return dt, None   # always check_in
+
+    # ── 4. Import mode ────────────────────────────────────────────────────
+    # True whenever ANY date or time column was detected — even just a date column alone
+    has_dt_info = bool(
+        col_map.get('datetime') or col_map.get('date')
+        or col_map.get('time') or col_map.get('time_in')
+    )
+    mark_attendance = request.POST.get('mark_attendance') == 'on' or has_dt_info
+
+    # ── 5. Process rows ───────────────────────────────────────────────────
+    imported     = 0   # new named student created
+    placeholders = 0   # attendance saved for unknown DNI (shown as "Desconocido")
+    att_marked   = 0
+    att_updated  = 0
+    dupes        = 0
+    skipped      : list = []
+    unregistered : list = []  # informational — DNI not in DB, attendance was saved anyway
+
+    seen_events: set = set()  # (student_pk, date, hour, minute, is_checkout)
+    imported_dates: list = []  # track all att_date values for post-import redirect
+
     for i, row in enumerate(raw_rows, start=2):
-        name = row.get('name', row.get('nombre', '')).strip()
-        if not name:
-            skipped.append(f'Row {i}: missing name — skipped.')
+        dni  = _norm_id(_g(row, 'dni'))
+        name = _g(row, 'name').strip()
+
+        # DNI is mandatory — skip rows without it
+        if not dni:
+            raw_peek = {k: v for k, v in row.items() if v}
+            skipped.append(
+                f'Fila {i}: sin DNI '
+                f'(columna mapeada: "{col_map.get("dni","ninguna")}", '
+                f'valores brutos: {dict(list(raw_peek.items())[:5])})'
+            )
             continue
-        email = row.get('email', row.get('correo', '')).strip()
-        if email and Student.objects.filter(email=email).exists():
-            skipped.append(f'Row {i}: {name} — email already registered, skipped.')
+
+        # ── Lookup student by DNI ─────────────────────────────────────
+        student = Student.objects.filter(dni=dni).exclude(dni='').first()
+
+        # ── Student not found ─────────────────────────────────────────
+        if student is None:
+            if name:
+                # File includes a real name → create full personnel record
+                email = _g(row, 'email')
+                if email and Student.objects.filter(email=email).exists():
+                    skipped.append(f'Fila {i} ({name}): email ya registrado — omitido.')
+                    continue
+                student = Student.objects.create(
+                    name          = name,
+                    email         = email,
+                    phone_number  = _g(row, 'phone')[:15],
+                    student_class = _g(row, 'class')[:100],
+                    position      = _g(row, 'position')[:150],
+                    area          = _g(row, 'area')[:150],
+                    work_schedule = _g(row, 'schedule')[:100],
+                    dni           = dni[:20],
+                    authorized    = True,
+                    qr_active     = True,
+                )
+                generate_qr_for_student(student)
+                imported += 1
+            else:
+                # DNI not in DB and no name → create a placeholder so attendance
+                # can be saved. display_name returns "Desconocido" for these.
+                # A second import of the same DNI will find this placeholder and
+                # just update the attendance (no duplicate placeholder created).
+                student = Student.objects.create(
+                    name       = f'Pendiente - DNI {dni}',
+                    email      = '',
+                    dni        = dni[:20],
+                    authorized = False,
+                    qr_active  = False,
+                )
+                placeholders += 1
+                unregistered.append(
+                    f'DNI {dni}: sin registro previo — '
+                    f'asistencia guardada como "Usuario no registrado".'
+                )
+
+        # ── Mark attendance ───────────────────────────────────────────
+        if not mark_attendance:
             continue
-        student = Student.objects.create(
-            name          = name,
-            email         = email,
-            phone_number  = row.get('phone_number', row.get('telefono', row.get('phone', ''))).strip(),
-            student_class = row.get('student_class', row.get('clase', row.get('class', ''))).strip(),
-            position      = row.get('position', row.get('cargo', '')).strip(),
-            area          = row.get('area', row.get('área', '')).strip(),
-            work_schedule = row.get('work_schedule', row.get('horario', '')).strip(),
-            authorized    = True,
-            qr_active     = True,
-        )
-        generate_qr_for_student(student)
-        imported += 1
+
+        check_in_dt, check_out_dt = _parse_row_times(row)
+
+        if check_in_dt is None and check_out_dt is None:
+            if mark_attendance:
+                raw_dt = {k: row.get(v, '') for k, v in col_map.items()
+                          if k in ('datetime', 'date', 'time', 'time_in', 'time_out')}
+                skipped.append(
+                    f'Fila {i} ({student.display_name}, DNI {dni}): '
+                    f'sin fecha/hora válida — asistencia no guardada. '
+                    f'Valores leídos: {raw_dt}'
+                )
+            continue
+
+        att_date = (check_in_dt or check_out_dt).date()
+        imported_dates.append(att_date)
+
+        # Deduplicate exact events within this file
+        def _dedup(dt, is_out):
+            if dt is None:
+                return None
+            key = (student.pk, att_date, dt.hour, dt.minute, is_out)
+            if key in seen_events:
+                return None   # duplicate
+            seen_events.add(key)
+            return dt
+
+        check_in_dt  = _dedup(check_in_dt,  False)
+        check_out_dt = _dedup(check_out_dt, True)
+        if check_in_dt is None and check_out_dt is None:
+            dupes += 1
+            continue
+
+        # Persist attendance record
+        def _fmt_dt(dt):
+            return dt.strftime('%H:%M:%S') if dt else 'NULL'
+
+        try:
+            att = Attendance.objects.get(student=student, date=att_date)
+            updated = False
+
+            if check_in_dt:
+                if att.check_in_time is None:
+                    att.check_in_time = check_in_dt
+                    updated = True
+                elif check_in_dt < att.check_in_time:
+                    # Keep the earliest check_in for the day
+                    att.check_in_time = check_in_dt
+                    updated = True
+                # A later check_in for the same day is silently dropped — it is
+                # NOT promoted to check_out; that would put the time in SALIDA
+                # when the file has only a single time column.
+
+            if check_out_dt:
+                if att.check_out_time is None or check_out_dt > att.check_out_time:
+                    att.check_out_time = check_out_dt
+                    updated = True
+
+            if updated:
+                att.save(update_fields=['check_in_time', 'check_out_time'])
+                att_updated += 1
+
+            estado = 'Completo' if att.check_in_time and att.check_out_time else ('Asistió' if att.check_in_time else '—')
+            logger.info('IMPORT fila %s | DNI=%s | entrada=%s | salida=%s | estado=%s',
+                        i, dni, _fmt_dt(att.check_in_time), _fmt_dt(att.check_out_time), estado)
+
+        except Attendance.DoesNotExist:
+            Attendance.objects.create(
+                student       = student,
+                date          = att_date,
+                check_in_time = check_in_dt,
+                check_out_time= check_out_dt,
+            )
+            att_marked += 1
+            estado = 'Completo' if check_in_dt and check_out_dt else ('Asistió' if check_in_dt else '—')
+            logger.info('IMPORT fila %s | DNI=%s | entrada=%s | salida=%s | estado=%s [NUEVO]',
+                        i, dni, _fmt_dt(check_in_dt), _fmt_dt(check_out_dt), estado)
 
     invalidate_embedding_cache()
-    messages.success(request, f'{imported} person(s) imported successfully.')
+
+    parts = []
+    if imported:      parts.append(f'{imported} persona(s) nueva(s) registrada(s)')
+    if att_marked:    parts.append(f'{att_marked} asistencia(s) nueva(s) guardada(s)')
+    if att_updated:   parts.append(f'{att_updated} asistencia(s) actualizada(s)')
+    if placeholders:  parts.append(f'{placeholders} guardada(s) como "Usuario no registrado"')
+    if dupes:         parts.append(f'{dupes} evento(s) duplicado(s) omitido(s)')
+    if not parts:     parts.append('Sin cambios en la base de datos')
+    messages.success(request, ' · '.join(parts) + '.')
+
+    # Show column map so the user can verify the parser understood the file
+    col_map_display = ', '.join(f'{s}→{h}' for s, h in sorted(col_map.items()))
+    messages.info(request, f'Columnas detectadas: {col_map_display or "(ninguna)"}')
+
+    if unregistered:
+        messages.warning(request,
+            f'{len(unregistered)} DNI(s) guardados como "Usuario no registrado" '
+            f'(no tienen ficha en el sistema):')
+    for msg in unregistered:
+        messages.warning(request, msg)
     for msg in skipped:
         messages.warning(request, msg)
+
+    # If attendance was saved, redirect to the report filtered to the imported
+    # date range so the user can see the records immediately.
+    if imported_dates and (att_marked or att_updated):
+        from django.urls import reverse
+        min_d = min(imported_dates).isoformat()
+        max_d = max(imported_dates).isoformat()
+        return redirect(
+            f"{reverse('student_attendance_list')}?date_from={min_d}&date_to={max_d}"
+        )
+
     return redirect('import_students')
 
 

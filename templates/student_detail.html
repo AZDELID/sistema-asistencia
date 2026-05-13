@@ -65,7 +65,10 @@
           <i class="fas fa-user"></i>
         </div>
       {% endif %}
-      <div style="font-weight:700;font-size:1rem">{{ student.name }}</div>
+      <div style="font-weight:700;font-size:1rem">{{ student.display_name }}</div>
+      {% if student.dni %}
+      <div style="font-family:monospace;font-size:0.75rem;color:var(--neon2);margin-top:2px">DNI {{ student.dni }}</div>
+      {% endif %}
       <div style="font-size:0.8rem;color:var(--text2);margin-top:4px">{{ student.student_class }}</div>
       <div style="margin-top:10px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
         {% if student.authorized %}
@@ -118,23 +121,35 @@
   <div class="glass-card">
     <div class="info-grid">
       <div>
-        <div class="form-label">Full Name</div>
-        <div style="font-weight:600">{{ student.name }}</div>
+        <div class="form-label">Nombre</div>
+        <div style="font-weight:600">{{ student.display_name }}</div>
+      </div>
+      <div>
+        <div class="form-label">DNI / Documento</div>
+        <div style="font-family:monospace;color:var(--neon2)">{{ student.dni|default:"—" }}</div>
       </div>
       <div>
         <div class="form-label">Email</div>
-        <div>{{ student.email }}</div>
+        <div>{{ student.email|default:"—" }}</div>
       </div>
       <div>
-        <div class="form-label">Phone</div>
-        <div>{{ student.phone_number }}</div>
+        <div class="form-label">Teléfono</div>
+        <div>{{ student.phone_number|default:"—" }}</div>
       </div>
       <div>
-        <div class="form-label">Class / Group</div>
-        <div>{{ student.student_class }}</div>
+        <div class="form-label">Cargo</div>
+        <div>{{ student.position|default:"—" }}</div>
+      </div>
+      <div>
+        <div class="form-label">Área</div>
+        <div>{{ student.area|default:"—" }}</div>
+      </div>
+      <div>
+        <div class="form-label">Grupo / Turno</div>
+        <div>{{ student.student_class|default:"—" }}</div>
       </div>
       <div style="grid-column:1/-1">
-        <div class="form-label">Unique ID</div>
+        <div class="form-label">UUID (QR)</div>
         <code style="font-size:0.78rem;color:var(--neon2)">{{ student.unique_id }}</code>
       </div>
     </div>
@@ -142,17 +157,20 @@
     <hr class="divider">
 
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <a href="{% url 'student-authorize' pk=student.pk %}" class="btn btn-primary">
-        <i class="fas fa-shield-halved"></i> Manage Authorization
+      <a href="{% url 'student-edit' pk=student.pk %}" class="btn btn-primary">
+        <i class="fas fa-user-pen"></i> Editar Perfil
+      </a>
+      <a href="{% url 'student-authorize' pk=student.pk %}" class="btn btn-secondary">
+        <i class="fas fa-shield-halved"></i> Autorización
       </a>
       <a href="{% url 'student-credential' student.pk %}" class="btn btn-secondary">
-        <i class="fas fa-id-card"></i> Credential
+        <i class="fas fa-id-card"></i> Credencial
       </a>
       <a href="{% url 'student-list' %}" class="btn btn-secondary">
-        <i class="fas fa-arrow-left"></i> Back to List
+        <i class="fas fa-arrow-left"></i> Volver
       </a>
       <a href="{% url 'student-delete' pk=student.pk %}" class="btn btn-danger">
-        <i class="fas fa-trash"></i> Delete
+        <i class="fas fa-trash"></i> Eliminar
       </a>
     </div>
   </div>

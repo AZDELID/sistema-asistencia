@@ -30,6 +30,7 @@ urlpatterns = [
     # Student management (admin only)
     path('students/',                        views.student_list,           name='student-list'),
     path('students/<int:pk>/',               views.student_detail,         name='student-detail'),
+    path('students/<int:pk>/edit/',           views.student_edit,           name='student-edit'),
     path('students/<int:pk>/authorize/',     views.student_authorize,      name='student-authorize'),
     path('students/<int:pk>/delete/',        views.student_delete,         name='student-delete'),
     path('students/<int:pk>/regenerate-qr/', views.student_regenerate_qr,           name='student-regenerate-qr'),

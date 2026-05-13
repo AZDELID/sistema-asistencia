@@ -4,16 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Environment
 
-- **Python:** 3.14 on Arch Linux (the venv uses `python3.14`)
-- **Django:** 6.0.5 — project package is `Project101`, sole app is `app1`
-- **Database:** SQLite (`db.sqlite3`)
-- **Timezone:** `Asia/Riyadh` (set in `settings.py`)
+- **Python:** 3.14 on Arch Linux — virtual env is `.venv/` (not `venv/`)
+- **Django:** 5.2.14 — project package is `Project101`, sole app is `app1`
+- **Database:** PostgreSQL — credentials are hardcoded in `Project101/settings.py` (NAME: `ASISTENCIA_PERSONAL`, USER: `postgres`, HOST: `127.0.0.1`, PORT: `5432`). `settings.py` reads from `os.environ.get()` so env vars override these defaults; Docker Compose injects them via `.env`.
+- **Timezone:** `America/Lima` (default; overridable via `TIME_ZONE` env var)
 
 ## Common Commands
 
 ```bash
 # Activate the virtual environment first
-source venv/bin/activate
+source .venv/bin/activate
 
 # Run the development server
 python manage.py runserver
@@ -36,13 +36,25 @@ python manage.py test app1
 
 ## Python 3.14 Dependency Setup
 
-Do **not** run `pip install -r requirements.txt` on Python 3.14 — that file targets Python 3.x with older pinned versions. Use the dedicated script instead:
+Do **not** run `pip install -r requirements.txt` on Python 3.14 — that file targets older Python versions. Use the dedicated script instead:
 
 ```bash
 bash install_314.sh
 ```
 
-This script installs from `requirements-314.txt` and then installs `facenet-pytorch==2.6.0` with `--no-deps` to avoid a false numpy<2.0 constraint. `pygame` is compiled from source and requires SDL2 system packages (`sdl2`, `sdl2_mixer`, etc.) installed via `pacman`.
+This script installs from `requirements-314.txt` and then installs `facenet-pytorch==2.6.0` with `--no-deps` to avoid a false numpy<2.0 constraint. `pygame` is compiled from source and requires SDL2 system packages (`sdl2`, `sdl2_mixer`, etc.) installed via `pacman`. Docker deployments use `requirements-docker.txt` instead.
+
+## Docker
+
+```bash
+# Build and start (PostgreSQL + Django)
+docker compose up --build
+
+# Apply migrations inside the running container
+docker compose exec web python manage.py migrate
+```
+
+The compose file maps port 8000 and mounts `media/` as a named volume. To pass a USB camera from the host, uncomment the `devices:` block in `docker-compose.yml`.
 
 ## Camera API endpoints
 
@@ -63,7 +75,7 @@ The `CameraManager` singleton lives in `app1/views.py`. It is never restarted au
 Browser → Project101/urls.py → app1/urls.py → app1/views.py → templates/
 ```
 
-All templates live at the project root under `templates/` (not inside the app). Media uploads (student photos, QR codes) are stored under `media/`.
+All templates live at the project root under `templates/` (not inside the app). Media uploads (student photos, QR codes, fotochecks) are stored under `media/`.
 
 ### ML pipeline (`app1/views.py`)
 
@@ -80,9 +92,18 @@ Recognition flow when the camera is running:
 8. Display is `cv2.flip(frame, 1)` (mirrored); bounding-box x-coordinates are remapped so labels stay over the correct face.
 9. Pygame plays `app1/suc.wav` on each check-in/check-out event.
 
+### Fotocheck generation (`app1/fotocheck.py`)
+
+Generates institutional ID cards (86×54 mm @ 300 DPI) as PNG and PDF. Pipeline per student: detect face with MTCNN → crop with shoulders → optional background removal via `rembg` → paste onto `plantilla.jpeg` → overlay name, DNI, cargo, area, QR code → save to `media/fotochecks/`. Required static assets must exist at `app1/static/app1/fotocheck_assets/plantilla.jpeg` and `logo.png`; `validate_assets()` checks this before rendering. Fonts fall back to DejaVu Sans if Arial is not found. `generate_all_fotocheck_assets(student)` is the single entry point that calls QR → PNG → PDF in order.
+
+### Excel reports (`app1/report_excel.py`, `app1/report_template.py`)
+
+- `report_excel.py` — `build_report(students_data, month, year) → bytes`: generates a styled openpyxl workbook from scratch with per-day attendance columns (A/F), weekend shading, and summary totals. Called by the `/students/attendance/export/excel/` view.
+- `report_template.py` — standalone CLI script (`python app1/report_template.py <csv> <plantilla.xlsx> <salida.xlsx>`): reads a biometric CSV (DNI + datetime columns) and fills an existing institutional Excel template in-place.
+
 ### Models (`app1/models.py`)
 
-- **`Student`** — person record with photo, `authorized` flag, and optional `position`, `area`, `work_schedule`, `student_class`, `email`, `phone_number` fields. `qr_active` controls QR attendance independently.
+- **`Student`** — person record with photo, `authorized` flag, and optional `position`, `area`, `work_schedule`, `student_class`, `email`, `phone_number`, `dni` fields. `qr_active` controls QR attendance independently. `face_crop`, `fotocheck_png`, `fotocheck_pdf` store auto-generated assets.
 - **`Attendance`** — one record per student per day; `check_in_time` / `check_out_time` are timestamps; `calculate_duration()` formats the session length.
 - **`CameraConfiguration`** — named camera entry with `camera_source` (int index or RTSP/HTTP URL) and `threshold` (per-camera override; default 0.6; lower = stricter).
 - **`SystemConfig`** — singleton model (`pk=1`). Access via `SystemConfig.get()`. Fields: `face_recognition_enabled`, `qr_enabled`, `checkout_delay_minutes`, `display_throttle_seconds`, `recognition_threshold`.
@@ -96,12 +117,14 @@ Recognition flow when the camera is running:
   - `/students/` and sub-paths — manage students
   - `/students/attendance/export/*` — export reports
   - `/students/<pk>/credential/` — credential card
+  - `/students/<pk>/fotocheck/{png,pdf,regen}/` — fotocheck download and regeneration
+  - `/credentials/` and `/credentials/generate/` — bulk fotocheck generation panel
   - `/camera-config/…` — manage camera sources
   - `/config/` — system configuration
 
 ### Student registration flow
 
-Admins register personnel at `/capture_student/`. The webcam captures a photo as base64-encoded POST field (`image_data`). Required fields: `name`. Optional: `email`, `phone_number`, `student_class`, `position`, `area`, `work_schedule`. Students created this way start with `authorized=True` and an auto-generated QR code. The embedding cache is invalidated immediately so the new person is recognizable right away.
+Admins register personnel at `/capture_student/`. The webcam captures a photo as base64-encoded POST field (`image_data`). Required fields: `name`. Optional: `email`, `phone_number`, `student_class`, `position`, `area`, `work_schedule`, `dni`. Students created this way start with `authorized=True` and an auto-generated QR code. The embedding cache is invalidated immediately so the new person is recognizable right away.
 
 ### Embedding cache internals
 
@@ -127,21 +150,28 @@ Admins register personnel at `/capture_student/`. The webcam captures a photo as
 | `app1/views.py` | All business logic, ML pipeline, CameraManager, export views |
 | `app1/models.py` | All Django models |
 | `app1/utils.py` | `generate_qr_for_student()`, `record_attendance()` |
+| `app1/fotocheck.py` | ID card (fotocheck) generation — PNG, PDF, QR with logo |
+| `app1/report_excel.py` | Styled Excel attendance report builder |
+| `app1/report_template.py` | CLI: fill existing institutional Excel template from biometric CSV |
 | `app1/urls.py` | All URL patterns |
+| `app1/static/app1/fotocheck_assets/` | `plantilla.jpeg` + `logo.png` required for fotocheck rendering |
 | `templates/base.html` | Shared layout, dark glassmorphism CSS variables |
 | `templates/attendance_kiosk.html` | Public kiosk — MJPEG + event overlay + Web Audio |
 | `templates/capture_student.html` | Registration form + mirrored webcam |
 | `templates/student_attendance_list.html` | Report with filters + export bar |
 | `templates/import_students.html` | Drag-and-drop CSV/Excel import |
 | `templates/student_credential.html` | Printable ID card |
+| `templates/credentials_list.html` | Bulk fotocheck generation panel |
 | `templates/system_config.html` | iOS-style config toggles |
-| `Project101/settings.py` | Django settings (timezone, media root, static files) |
+| `Project101/settings.py` | Django settings (DB credentials, timezone, media root) |
 
 ## Known gotchas
 
+- Virtual env is `.venv/`, not `venv/` — use `source .venv/bin/activate`.
 - Do not `pip install -r requirements.txt` on Python 3.14 — use `install_314.sh`.
 - `facenet-pytorch==2.6.0` must be installed with `--no-deps` (stale `numpy<2.0` metadata constraint).
 - `pygame` has no cp314 wheel — `install_314.sh` compiles it from source, which requires SDL2 system packages.
-- On headless servers, set `SDL_AUDIODRIVER=dummy` to prevent Pygame audio errors.
-- `db.sqlite3` and `media/` are gitignored — do not commit them.
-- Stray `=version` files in the project root (created by malformed `pip install =x.y.z` invocations) are also gitignored via the `=*` pattern in `.gitignore`.
+- On headless servers, set `SDL_AUDIODRIVER=dummy` and `SDL_VIDEODRIVER=dummy` to prevent Pygame errors (already in `.env.example`).
+- **Migration squash trap:** The codebase was once reset to a single `0001_initial.py` after many migrations had already been applied to PostgreSQL. If `django_migrations` already contains `0001_initial` but the table is missing columns, it means fields were added to the model after the original table was created. Fix by writing a `0002_add_missing_fields.py` with explicit `AddField` operations — never delete `django_migrations` rows or drop and recreate the table.
+- `media/` is gitignored — do not commit it.
+- Stray `=version` files in the project root (created by malformed `pip install =x.y.z` invocations) are gitignored via the `=*` pattern in `.gitignore`.

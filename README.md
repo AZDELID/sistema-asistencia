@@ -1,428 +1,430 @@
-# Sistema de Control de Asistencia en Tiempo Real
+# 🎯 Sistema de Control de Asistencia en Tiempo Real
 
-**Real-time attendance system with facial recognition, QR codes, institutional ID card generation, PostgreSQL, MJPEG streaming, bulk import, Excel/CSV reports, and a dark glassmorphism kiosk UI — built on Django 6 and Python 3.14.**
+![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-5.2.14-green?logo=django&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue?logo=postgresql&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-red?logo=pytorch&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Quick Start — Docker](#quick-start--docker)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Institutional Fotocheck (ID Cards)](#institutional-fotocheck-id-cards)
-- [PostgreSQL](#postgresql)
-- [Project Structure](#project-structure)
-- [URL Reference](#url-reference)
-- [Camera API](#camera-api)
-- [Reports & Export](#reports--export)
-- [Personnel Import](#personnel-import)
-- [Architecture](#architecture)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
-- [Author](#author)
+Sistema biométrico de asistencia en tiempo real para instituciones y organizaciones. Reconoce al personal por **rostro** o **código QR**, registra entradas y salidas, genera carnés institucionales (fotochecks) en PNG y PDF, y ofrece importación histórica de asistencias desde Excel/CSV con reportes exportables.
 
 ---
 
-## Overview
+## 📋 Tabla de Contenidos
 
-A real-time biometric attendance system designed for institutions and organizations. Staff or students approach the kiosk and are recognized automatically by face or QR code — no manual input required. The system records check-in and check-out times, enforces duplicate-prevention logic, generates institutional ID cards (fotochecks) as PNG and print-ready PDF, and provides a full admin panel for managing personnel, cameras, attendance records, and system settings.
-
----
-
-## Features
-
-### Recognition
-- **Real-time facial recognition** via MTCNN + InceptionResnetV1 (512-d embeddings, L2 distance)
-- **QR code attendance** — each registered person gets a personal QR (UUID-based) with the institutional logo embedded at the centre
-- **Hybrid mode** — face and QR run simultaneously every frame; whichever triggers first marks attendance
-- **Temporal stability buffer** — 3-frame confirmation before marking (2 frames at ≥ 80 % confidence)
-- **Robust embedding cache** — 1 embedding per person; corrupted photos skipped with warnings; no IndexError on multi-face photos
-- **Mirror display** — camera feed is horizontally flipped for natural selfie/webcam feel; recognition uses the original unflipped frame
-
-### Attendance
-- **Check-in / Check-out** — automatic: first scan = check-in, second scan (after configurable window) = check-out
-- **Smart duplicate prevention** — per-person 10-second debounce, "ya fue registrado" feedback every 5 s while person remains in frame
-- **Multi-camera support** — any number of cameras (webcam index or RTSP/HTTP URL)
-- **Configurable thresholds** — global default + per-camera override
-
-### Institutional ID Cards (Fotocheck)
-- **Template-based generation** — overlays student data on the official `plantilla.jpeg` template
-- **Circular face photo** — MTCNN crops and masks the face into the card's photo circle
-- **QR with institutional logo** — ERROR_CORRECT_H QR with `logo.jpeg` embedded in the centre
-- **PNG + PDF** — 1024 × 1536 px PNG (300 DPI) and a matching print-ready PDF (86 × 129 mm)
-- **Automatic generation** — assets are built in a background thread immediately after registration
-- **Bulk generation panel** — regenerate cards for all personnel at `/credentials/`
-- **Individual download** — download PNG or PDF per person from the credential view
-
-### Admin & Management
-- **Bulk personnel import** — CSV or Excel (.xlsx) with Spanish/English column aliases
-- **Attendance reports** — filterable by name, area, date range; exportable as CSV or Excel
-- **Printable credential card** — glassmorphism ID card with photo, QR, and position details
-- **System configuration** — toggle face/QR recognition, set checkout delay, recognition threshold, and display throttle from the UI
-- **RBAC** — admins manage everything; public kiosk requires no login
-
-### UX
-- **Dark glassmorphism UI** — full-screen kiosk with animated result overlay and Web Audio chimes
-- **MJPEG live stream** — single `/camera/stream/` endpoint consumed by `<img>` tag, no WebSocket needed
-- **Sound feedback** — Web Audio API chimes on check-in/check-out, distinct tone for "already marked"
+- [Descripción](#-descripción)
+- [Características](#-características)
+- [Tecnologías](#-tecnologías)
+- [Inicio Rápido — Docker](#-inicio-rápido--docker)
+- [Instalación Local](#-instalación-local)
+- [Configuración](#-configuración)
+- [Uso del Sistema](#-uso-del-sistema)
+- [Importación de Asistencias](#-importación-de-asistencias)
+- [Fotocheck / Carnés Institucionales](#-fotocheck--carnés-institucionales)
+- [Reportes y Exportación](#-reportes-y-exportación)
+- [Base de Datos PostgreSQL](#-base-de-datos-postgresql)
+- [Estructura del Proyecto](#-estructura-del-proyecto)
+- [Referencia de URLs](#-referencia-de-urls)
+- [API de Cámara](#-api-de-cámara)
+- [Arquitectura](#-arquitectura)
+- [Mejoras Recientes](#-mejoras-recientes)
+- [Solución de Problemas](#-solución-de-problemas)
+- [Licencia y Autor](#-licencia-y-autor)
 
 ---
 
-## Tech Stack
+## 📖 Descripción
 
-| Layer | Technology |
-|-------|-----------|
-| Backend framework | Django 6.0.5 |
-| Language | Python 3.14 |
-| Face detection | MTCNN (facenet-pytorch 2.6.0) |
-| Face embedding | InceptionResnetV1 — vggface2 pretrained |
-| ML framework | PyTorch 2.11 |
-| Computer vision | OpenCV 4.13 |
-| QR generation | qrcode 8.2 + Pillow 12 |
-| QR reading | `cv2.QRCodeDetector` (built-in, zero extra deps) |
-| ID card / PDF | Pillow 12 (PNG overlay) + ReportLab 4.5 (PDF) |
-| Video streaming | MJPEG multipart over HTTP |
-| Database | PostgreSQL 17+ (production) / SQLite (dev fallback) |
-| DB adapter | psycopg2-binary 2.9 |
-| Audio | Pygame (server-side) + Web Audio API (browser-side) |
-| Excel export/import | openpyxl |
+El personal o alumnos se acercan al kiosco y son reconocidos automáticamente por rostro o código QR — sin entrada manual. El sistema:
+
+- Registra **check-in** y **check-out** con prevención de duplicados multicapa
+- Importa asistencias históricas desde archivos **Excel/CSV** de equipos biométricos
+- Genera **carnés institucionales** (PNG + PDF imprimible) con foto circular, QR y datos del puesto
+- Provee un **panel de administración** completo para gestionar personal, cámaras, registros y configuración
+- Ofrece un **kiosco público** con UI dark glassmorphism, stream MJPEG y audio Web API
+
+---
+
+## ✨ Características
+
+### Reconocimiento
+- **Reconocimiento facial en tiempo real** — MTCNN + InceptionResnetV1 (embeddings 512-d, distancia L2)
+- **Asistencia por código QR** — QR personal basado en UUID con logo institucional embebido
+- **Modo híbrido** — rostro y QR operan simultáneamente; el primero en disparar registra la asistencia
+- **Buffer de estabilidad temporal** — confirmación en 3 frames antes de registrar
+- **Caché de embeddings robusta** — 1 embedding por persona; fotos corruptas se omiten con advertencia
+
+### Asistencia
+- **Check-in / Check-out automático** — primer escaneo = entrada, segundo (después de ventana configurable) = salida
+- **Prevención de duplicados multicapa** — debounce de 10 s por persona, feedback "ya fue registrado" cada 5 s
+- **Soporte multi-cámara** — webcam por índice o URL RTSP/HTTP
+- **Umbrales configurables** — global + por cámara
+
+### Gestión de Personal
+- **Registro individual** — foto desde webcam o archivo, con generación inmediata de QR y fotocheck
+- **Edición de perfiles** — actualización de nombre, DNI, cargo, área, horario, teléfono, email, clase
+- **Importación masiva** — CSV o Excel con detección automática de columnas en español e inglés
+- **Importación histórica** — asistencias de sistemas biométricos externos con mapeo inteligente
+- **Placeholders automáticos** — DNIs no registrados generan un perfil "Desconocido" para no perder historial
+
+### Reportes
+- **Tabla de asistencias** — filtrable por nombre, área y rango de fechas
+- **Exportar a Excel** — reporte oficial IESTP Paucartambo con formato por mes
+- **Exportar a CSV** — descarga directa con todos los campos
+- **Impresión** — CSS optimizado para impresión oculta la barra lateral y controles
+
+### Fotocheck
+- **Generación automática** en PNG (alta resolución) y PDF (imprimible)
+- **Panel masivo** — regenera carnés para todo el personal desde `/credentials/`
+- **QR con logo** — ERROR_CORRECT_H con logo institucional superpuesto al centro
+
+---
+
+## 🔧 Tecnologías
+
+| Capa | Tecnología |
+|------|-----------|
+| Framework backend | Django 5.2.14 |
+| Lenguaje | Python 3.14 |
+| Detección facial | MTCNN (facenet-pytorch 2.6.0) |
+| Embeddings faciales | InceptionResnetV1 — vggface2 pretrained |
+| Framework ML | PyTorch 2.x |
+| Visión por computadora | OpenCV 4.x |
+| Generación QR | qrcode 8.x + Pillow 12 |
+| Lectura QR | `cv2.QRCodeDetector` (sin dependencias extra) |
+| Carné / PDF | Pillow 12 (overlay PNG) + ReportLab 4.x (PDF) |
+| Streaming de video | MJPEG multipart sobre HTTP |
+| Base de datos | PostgreSQL 17+ (producción) |
+| Adaptador DB | psycopg2-binary 2.9 |
+| Audio | Pygame (servidor) + Web Audio API (navegador) |
+| Excel / importación | openpyxl |
 | Frontend | Vanilla JS, CSS glassmorphism, Font Awesome |
 
 ---
 
-## Quick Start — Docker
+## 🐳 Inicio Rápido — Docker
 
-The fastest way to run the system without installing Python or ML dependencies locally.
-Docker Compose starts both the **Django web service** and a **PostgreSQL 17** database automatically.
+La forma más rápida de ejecutar el sistema sin instalar Python ni dependencias ML localmente.
 
-### Prerequisites
+### Requisitos previos
 
 - [Docker](https://docs.docker.com/get-docker/) 24+
 - [Docker Compose](https://docs.docker.com/compose/install/) v2.20+
-- A camera connected to the host (optional — the system runs without one)
+- Cámara conectada al host (opcional)
 
-> **Image size warning:** The first build downloads PyTorch (~1–2 GB CPU build) and other heavy ML libraries. Expect 5–8 GB total image size and 10–20 minutes on the first build. Subsequent builds use the Docker layer cache.
+> **Aviso de tamaño:** La primera build descarga PyTorch (~1–2 GB) y otras librerías pesadas. Esperar 5–8 GB de imagen total y 10–20 minutos en la primera compilación.
 
-### 1. Clone and configure
+### Pasos
 
 ```bash
+# 1. Clonar y configurar
 git clone git@github.com:Wil-1302/Sistema-de-control-de-asistencia.git
 cd Sistema-de-control-de-asistencia
 cp .env.example .env
-# Edit .env — set DB_PASSWORD, SECRET_KEY and any other values
-```
+# Editar .env: establecer DB_PASSWORD, SECRET_KEY
 
-### 2. Build the image
+# 2. Construir e iniciar
+docker compose up --build
 
-```bash
-docker compose build
-```
-
-### 3. Run the system
-
-```bash
-docker compose up
-```
-
-`entrypoint.sh` waits for PostgreSQL to be ready, then runs `python manage.py migrate` automatically. Open `http://localhost:8000/` in your browser.
-
-To run in the background:
-
-```bash
-docker compose up -d
-```
-
-### 4. Create an admin user
-
-```bash
+# 3. Crear superusuario (admin)
 docker compose exec web python manage.py createsuperuser
+
+# 4. Abrir en el navegador
+# http://localhost:8000/
 ```
 
-### 5. Enable camera access (Linux)
+### Habilitar cámara (Linux)
 
-Edit `docker-compose.yml` and uncomment the `devices` section:
+Editar `docker-compose.yml` y descomentar el bloque `devices`:
 
 ```yaml
 devices:
   - /dev/video0:/dev/video0
 ```
 
-Your user must be in the `video` group on the host:
-
 ```bash
-sudo usermod -aG video $USER   # log out and back in
-```
-
-Then restart the container:
-
-```bash
+sudo usermod -aG video $USER   # cerrar sesión y volver a entrar
 docker compose down && docker compose up
 ```
 
-### Common Docker commands
+### Comandos Docker útiles
 
 ```bash
-# View live logs
-docker compose logs -f
-
-# Stop the system
-docker compose down
-
-# Rebuild after dependency changes
-docker compose build --no-cache
-
-# Run any manage.py command
-docker compose exec web python manage.py <command>
-
-# Open a shell inside the container
-docker compose exec web bash
-
-# Apply migrations manually
-docker compose exec web python manage.py migrate
-
-# Regenerate all fotochecks inside the container
-docker compose exec web python manage.py shell -c "
-from app1.models import Student
-from app1.fotocheck import generate_all_fotocheck_assets
-for s in Student.objects.filter(image__isnull=False).exclude(image=''):
-    generate_all_fotocheck_assets(s)
-    print(s.name, 'done')
-"
+docker compose logs -f                              # logs en vivo
+docker compose down                                  # detener
+docker compose build --no-cache                     # rebuild limpio
+docker compose exec web python manage.py <comando>  # cualquier manage.py
+docker compose exec web bash                         # shell dentro del contenedor
+docker compose exec web python manage.py migrate    # aplicar migraciones
 ```
 
-### Docker file overview
-
-| File | Purpose |
-|------|---------|
-| `Dockerfile` | Python 3.14-slim image with all system and Python deps |
-| `docker-compose.yml` | Web + PostgreSQL services, ports, volumes, env, camera devices |
-| `.dockerignore` | Excludes venv, media, .git, caches from build context |
-| `requirements-docker.txt` | Headless deps (opencv-headless; torch installed separately) |
-| `entrypoint.sh` | Waits for DB, auto-runs migrations, then starts the server |
-
 ---
 
-## Requirements
+## 💻 Instalación Local
 
-### Hardware
-
-- Webcam or IP camera accessible from the server
-- GPU optional but recommended for faster face recognition
-
-### Software
-
-- Python 3.14 (Arch Linux — see `install_314.sh`) or Python 3.12+ (other systems)
-- PostgreSQL 17+ for production; SQLite works for local development
-- Liberation Sans fonts for ID card text: `ttf-liberation` (Arch) / `fonts-liberation` (Debian/Ubuntu)
-- SDL2 system libraries for Pygame audio: `sdl2 sdl2_mixer sdl2_image sdl2_ttf portmidi`
-- Git + SSH key configured for GitHub
-
----
-
-## Installation
-
-### 1. Clone the repository
+### 1. Clonar el repositorio
 
 ```bash
 git clone git@github.com:Wil-1302/Sistema-de-control-de-asistencia.git
 cd Sistema-de-control-de-asistencia
 ```
 
-### 2. Create and activate a virtual environment
+### 2. Crear y activar el entorno virtual
+
+> ⚠️ El entorno virtual es `.venv/` (con punto), **no** `venv/`.
 
 ```bash
-python3.14 -m venv venv
-source venv/bin/activate
+python3.14 -m venv .venv
+source .venv/bin/activate
 ```
 
-### 3. Install dependencies
+### 3. Instalar dependencias
 
-**On Python 3.14 / Arch Linux (recommended):**
+**En Python 3.14 / Arch Linux (recomendado):**
 
 ```bash
 bash install_314.sh
 ```
 
-This script:
-1. Installs SDL2 system packages via `pacman`
-2. Installs all Python packages from `requirements-314.txt`
-3. Installs `facenet-pytorch==2.6.0` with `--no-deps` (avoids a false `numpy<2.0` constraint)
+Este script:
+1. Instala paquetes SDL2 del sistema vía `pacman`
+2. Instala todos los paquetes Python desde `requirements-314.txt`
+3. Instala `facenet-pytorch==2.6.0` con `--no-deps` (evita constraint falsa de `numpy<2.0`)
+4. Compila Pygame desde fuente (no hay wheel para cp314)
 
-**On Python 3.12 / other systems:**
+> ❌ **No ejecutar** `pip install -r requirements.txt` en Python 3.14 — ese archivo apunta a versiones antiguas.
+
+**En Python 3.12+ / otros sistemas:**
 
 ```bash
 pip install -r requirements.txt
 pip install --no-deps facenet-pytorch==2.6.0
 ```
 
-### 4. Configure environment variables
+### 4. Configurar variables de entorno
 
 ```bash
 cp .env.example .env
-# Edit .env — at minimum set DB_PASSWORD if using PostgreSQL
+# Editar .env según el entorno
 ```
 
-### 5. Apply database migrations
+### 5. Aplicar migraciones
 
 ```bash
 python manage.py migrate
 ```
 
-### 6. Create a superuser (admin)
+### 6. Crear superusuario
 
 ```bash
 python manage.py createsuperuser
 ```
 
-### 7. Run the development server
+### 7. Iniciar el servidor de desarrollo
 
 ```bash
 python manage.py runserver
 ```
 
-The kiosk is available at `http://127.0.0.1:8000/`.
+El kiosco está disponible en `http://127.0.0.1:8000/`.
 
 ---
 
-## Configuration
+## ⚙️ Configuración
 
-### Environment variables
+### Variables de entorno (`.env`)
 
-Copy `.env.example` to `.env` and fill in values for production:
+| Variable | Valor por defecto | Descripción |
+|----------|-------------------|-------------|
+| `SECRET_KEY` | clave de dev insegura | Clave secreta Django — **cambiar en producción** |
+| `DEBUG` | `True` | Poner `False` en producción |
+| `ALLOWED_HOSTS` | `*` | Hosts permitidos separados por coma |
+| `DB_NAME` | `ASISTENCIA_PERSONAL` | Nombre de la base de datos PostgreSQL |
+| `DB_USER` | `postgres` | Usuario PostgreSQL |
+| `DB_PASSWORD` | _(requerido)_ | Contraseña PostgreSQL |
+| `DB_HOST` | `127.0.0.1` | Host PostgreSQL |
+| `DB_PORT` | `5432` | Puerto PostgreSQL |
+| `TIME_ZONE` | `America/Lima` | Zona horaria |
+| `SDL_AUDIODRIVER` | _(sin definir)_ | Poner `dummy` en servidores sin audio |
+| `SDL_VIDEODRIVER` | _(sin definir)_ | Poner `dummy` en servidores headless |
 
-```bash
-cp .env.example .env
-```
+### Configuración del sistema (desde la UI)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SECRET_KEY` | insecure dev key | Django secret key — **change in production** |
-| `DEBUG` | `True` | Set to `False` in production |
-| `ALLOWED_HOSTS` | `*` | Comma-separated list of allowed hosts |
-| `DB_ENGINE` | `django.db.backends.postgresql` | Set to `django.db.backends.sqlite3` for local dev |
-| `DB_NAME` | `attendance_db` | PostgreSQL database name |
-| `DB_USER` | `attendance_user` | PostgreSQL user |
-| `DB_PASSWORD` | _(required)_ | PostgreSQL password |
-| `DB_HOST` | `127.0.0.1` | PostgreSQL host |
-| `DB_PORT` | `5432` | PostgreSQL port |
-| `SDL_AUDIODRIVER` | _(unset)_ | Set to `dummy` on headless servers |
+Ir a **Configuración del sistema** (`/config/`) en el panel admin:
 
-### System configuration (in-app)
+| Parámetro | Descripción |
+|-----------|-------------|
+| Reconocimiento facial habilitado | Activa/desactiva el reconocimiento facial globalmente |
+| Asistencia por QR habilitada | Activa/desactiva la lectura de QR globalmente |
+| Delay de check-out (min) | Minutos mínimos entre entrada y salida |
+| Throttle de feedback duplicado (s) | Segundos entre mensajes "ya registrado" por persona |
+| Umbral de reconocimiento global | Distancia L2 (0.1–1.0; menor = más estricto) |
 
-Go to **System Configuration** (`/config/`) in the admin panel to adjust:
+### Configurar cámaras
 
-| Setting | Description |
-|---------|-------------|
-| Face recognition enabled | Toggle face recognition globally |
-| QR attendance enabled | Toggle QR attendance globally |
-| Check-out delay (min) | Minimum minutes between check-in and check-out |
-| Duplicate feedback throttle (s) | Seconds between "ya fue registrado" messages per person |
-| Default recognition threshold | L2 distance cutoff (0.1–1.0; lower = stricter) |
-
-### Camera setup
-
-1. Log in as admin
-2. Go to **Camera Config** → **Add**
-3. Enter a name and camera source:
-   - Local webcam: `0` (or `1`, `2` for additional cameras)
+1. Iniciar sesión como admin
+2. Ir a **Camera Config** → **Add**
+3. Ingresar nombre y fuente de cámara:
+   - Webcam local: `0` (o `1`, `2` para cámaras adicionales)
    - IP camera: `rtsp://user:pass@192.168.1.100/stream`
    - HTTP MJPEG: `http://192.168.1.100:8080/video`
-4. Optionally set a per-camera recognition threshold (overrides global default)
+4. Opcionalmente establecer umbral de reconocimiento por cámara
 
 ---
 
-## Usage
+## 🚀 Uso del Sistema
 
-### Personnel registration (admin)
+### Registro de personal (admin)
 
-1. Log in as admin
-2. Go to **Register Student** (`/capture_student/`)
-3. Fill in name, DNI, email, phone, position, area, work schedule, and class/group
-4. Capture a photo via the webcam tab **or** upload a photo file
-5. The person is immediately authorized; QR, face crop, PNG card, and PDF card are generated in the background
+1. Iniciar sesión como admin
+2. Ir a **Register** (`/capture_student/`)
+3. Completar: nombre, DNI, email, teléfono, cargo, área, horario, clase/grupo
+4. Capturar foto desde la webcam **o** subir un archivo de imagen
+5. El sistema genera automáticamente: QR, recorte facial, carné PNG y PDF
 
-### Bulk personnel import (admin)
+### Edición de perfiles (admin)
 
-1. Go to **Import Personnel** (`/import/`)
-2. Upload a CSV or Excel file
-3. Required column: `name` or `nombre`
-4. Optional columns: `email`, `phone_number`, `position`/`cargo`, `area`/`área`, `work_schedule`/`horario`, `student_class`/`clase`, `dni`
-5. All imported rows are auto-authorized with a generated QR code
+1. Ir a **Students** (`/students/`)
+2. Hacer clic en el perfil → **Edit** (`/students/<pk>/edit/`)
+3. Actualizar cualquier campo: nombre, DNI, cargo, área, horario, email, teléfono, clase
+4. Guardar — los cambios se reflejan inmediatamente
 
-### Attendance kiosk (public)
+### Kiosco de asistencia (público)
 
-1. Open `http://127.0.0.1:8000/` — redirects to the kiosk
-2. Press **Start Camera**
-3. The person looks at the camera **or** shows their QR code
-4. The system recognizes them and records attendance automatically:
-   - **First scan of the day** → Check-in registered
-   - **After check-out delay** → Check-out registered
-   - **Already marked** → "Ya fue registrado" card shown (no duplicate in DB)
+1. Abrir `http://127.0.0.1:8000/` — redirige al kiosco
+2. Presionar **Start Camera**
+3. La persona mira a la cámara **o** muestra su QR
+4. El sistema registra automáticamente:
+   - **Primer escaneo del día** → Entrada registrada
+   - **Después del delay configurado** → Salida registrada
+   - **Ya marcado** → Tarjeta "Ya fue registrado" (sin duplicado en BD)
 
-### Attendance reports (admin)
+### Reporte de asistencias (admin)
 
-1. Go to **Attendance** (`/students/attendance/`)
-2. Filter by name, area, or date range
-3. Export results as **Excel** or **CSV**
-4. Print the filtered table directly from the browser
-
-### Credential / Fotocheck (admin)
-
-1. Go to **Students** → select a person → **Credential** (`/students/<pk>/credential/`)
-2. Preview the generated PNG card with the institutional template
-3. Download the **PNG** (screen use) or **PDF** (print-ready, 86 × 129 mm)
-4. Click **Regenerate** to rebuild all assets if the template or data changed
+1. Ir a **Attendance** (`/students/attendance/`)
+2. Filtrar por nombre, área o rango de fechas
+3. Exportar como **Reporte Oficial Excel** (formato IESTP por mes) o **CSV**
+4. Imprimir la tabla filtrada directamente desde el navegador
 
 ---
 
-## Institutional Fotocheck (ID Cards)
+## 📥 Importación de Asistencias
 
-The system automatically generates institutional ID cards (fotochecks) for every registered person.
-Cards are built by overlaying student data on the official template image and are available as a high-resolution PNG and a print-ready PDF.
+El módulo de importación acepta archivos **CSV** (UTF-8 o UTF-8 BOM) y **Excel (.xlsx)** y detecta automáticamente las columnas del archivo, incluyendo formatos de exportación de equipos biométricos.
 
-### Card specifications
+### Columnas reconocidas
 
-| Property | Value |
-|----------|-------|
-| Base image | `plantilla.jpeg` (official IESTP Paucartambo template) |
-| Output size | 1024 × 1536 px portrait |
-| Print size | 86 × 129 mm at 300 DPI |
-| Formats | PNG (download / screen) + PDF (print-ready) |
-| QR error correction | ERROR_CORRECT_H (~30 % recovery — survives logo overlay) |
-| Face detection | MTCNN crop + circular mask |
-| Fonts | Liberation Sans Bold / Regular |
+| Semántica | Aliases aceptados |
+|-----------|------------------|
+| DNI / código | `dni`, `cedula`, `documento`, `cod`, `nro documento` |
+| Nombre | `nombre`, `name`, `apellidos y nombres`, `trabajador`, `colaborador` |
+| Fecha | `fecha`, `date`, `dia`, `fecha acceso`, `fecha ingreso` |
+| Hora entrada | `hora entrada`, `hora_entrada`, `time_in`, `checkin`, `entrada` |
+| Hora salida | `hora salida`, `hora_salida`, `time_out`, `checkout`, `salida` |
+| Fecha+hora | `fecha hora`, `datetime`, `timestamp`, `fecha_y_hora` |
+| Email | `email`, `correo` |
+| Cargo | `position`, `cargo`, `puesto` |
+| Área | `area`, `área`, `departamento` |
+| Horario | `work_schedule`, `horario`, `jornada` |
 
-### Asset locations
+### Reglas de mapeo de tiempos
+
+El sistema aplica estas reglas en orden estricto para evitar inversión de entrada/salida:
+
+| Escenario del archivo | Resultado |
+|----------------------|-----------|
+| Una sola columna de tiempo/datetime | → `check_in_time` siempre |
+| `hora entrada` con valor + `hora salida` con valor | → `check_in` y `check_out` respectivamente |
+| `hora entrada` vacía + `hora salida` con valor | → promovido a `check_in_time` (nunca a salida) |
+| Solo columna `hora salida` sin columna de entrada | → promovido a `check_in_time` |
+| Sin ninguna hora válida en la fila | → fila omitida con advertencia |
+
+> ✅ **Regla fundamental:** Si el archivo produce una sola hora (en cualquier columna), esa hora va a `check_in_time`. `check_out_time` solo se establece cuando hay dos tiempos reales distintos por fila.
+
+### Manejo de DNI no registrado (placeholders)
+
+Si el archivo trae un DNI que no existe en la base de datos:
+
+- **Con nombre en el archivo** → Se crea el perfil completo y se guarda la asistencia.
+- **Sin nombre en el archivo** → Se crea un perfil `Pendiente - DNI XXXXXXXX` que aparece como "Desconocido" en los reportes. Permite preservar el historial biométrico sin perder datos. Un segundo import del mismo DNI actualiza la asistencia sin crear duplicado.
+
+### Logging de importación
+
+Durante cada importación, el servidor imprime en consola el mapeo por fila:
+
+```
+INFO IMPORT fila 3 | DNI=12345678 | entrada=08:30:00 | salida=NULL | estado=Asistió [NUEVO]
+INFO IMPORT fila 4 | DNI=87654321 | entrada=08:15:00 | salida=17:00:00 | estado=Completo
+```
+
+### Deduplicación
+
+- Eventos con el mismo (DNI, fecha, hora, minuto, tipo) dentro del mismo archivo son ignorados.
+- Si ya existe un registro para (persona, fecha), se actualiza: se guarda el `check_in` más temprano y el `check_out` más tardío del día.
+
+### Flujo de importación histórica
+
+```
+Subir archivo
+    │
+    ├─► Detectar formato (CSV / XLSX)
+    ├─► Mapear columnas (alias español/inglés)
+    ├─► Por cada fila:
+    │       ├─► Buscar persona por DNI
+    │       │       ├─► Encontrada → usar perfil existente
+    │       │       └─► No encontrada → crear perfil o placeholder
+    │       ├─► Parsear fecha/hora → check_in o check_out
+    │       └─► Guardar Attendance (crear o actualizar)
+    └─► Redirigir al reporte filtrado por las fechas importadas
+```
+
+---
+
+## 🪪 Fotocheck / Carnés Institucionales
+
+El sistema genera carnés institucionales automáticamente para cada persona registrada.
+
+### Especificaciones del carné
+
+| Propiedad | Valor |
+|-----------|-------|
+| Imagen base | `plantilla.jpeg` (template IESTP Paucartambo) |
+| Tamaño de salida | 1024 × 1536 px (portrait) |
+| Tamaño de impresión | 86 × 129 mm a 300 DPI |
+| Formatos | PNG (pantalla) + PDF (imprimible) |
+| Corrección de error QR | ERROR_CORRECT_H (~30 % — soporta superposición del logo) |
+| Detección facial | MTCNN recorte + máscara circular |
+
+### Ubicación de assets
 
 ```
 app1/static/app1/fotocheck_assets/
-    plantilla.jpeg   ← card background template  (versioned in git)
-    logo.jpeg        ← institutional logo (embedded in QR centre)  (versioned in git)
+    plantilla.jpeg   ← template de fondo del carné (versionado en git)
+    logo.png         ← logo institucional (embebido en el centro del QR)
 ```
 
-### How to replace the template
+### Generación individual
 
-1. Replace `app1/static/app1/fotocheck_assets/plantilla.jpeg` with the new template image.
-2. Update the pixel-coordinate constants at the top of `app1/fotocheck.py`:
-   - `PHOTO_CX`, `PHOTO_CY`, `PHOTO_R` — centre and radius of the face circle
-   - `NAME_X1 … NAME_Y2` — name text bounding box
-   - `DNI_VAL_X`, `DNI_VAL_Y`, `CARGO_VAL_Y`, `AREA_VAL_Y` — field value positions
-   - `QR_X1 … QR_Y2` — QR code paste zone
-   - `ESTADO_CX`, `ESTADO_CY` — ACTIVO/INACTIVO badge centre
-3. Run the bulk regeneration command (see below) to rebuild all cards.
+Desde el perfil de la persona: **Students** → perfil → **Credential** → botón **Regenerate**.
 
-### How to replace the institutional logo (QR centre)
-
-1. Replace `app1/static/app1/fotocheck_assets/logo.jpeg` with the new logo.
-2. Regenerate all QR codes + cards:
+### Generación masiva
 
 ```bash
+# Desde la UI
+# /credentials/ → clic en "Generate All"
+
+# Desde el shell Django
+source .venv/bin/activate
 python manage.py shell -c "
+from app1.models import Student
+from app1.fotocheck import generate_all_fotocheck_assets
+for s in Student.objects.filter(image__isnull=False).exclude(image=''):
+    r = generate_all_fotocheck_assets(s)
+    print(s.name, r)
+"
+
+# Desde Docker
+docker compose exec web python manage.py shell -c "
 from app1.models import Student
 from app1.fotocheck import generate_all_fotocheck_assets
 for s in Student.objects.filter(image__isnull=False).exclude(image=''):
@@ -431,444 +433,358 @@ for s in Student.objects.filter(image__isnull=False).exclude(image=''):
 "
 ```
 
-### How to regenerate fotochecks (bulk)
+### Imprimir a tamaño real (86 × 129 mm)
 
-**Via the web UI:**
-Go to `/credentials/` → click **Generate All**.
-
-**Via the Django shell:**
-
-```bash
-source venv/bin/activate
-python manage.py shell -c "
-from app1.models import Student
-from app1.fotocheck import generate_all_fotocheck_assets
-for s in Student.objects.filter(image__isnull=False).exclude(image=''):
-    r = generate_all_fotocheck_assets(s)
-    print(s.name, r)
-"
-```
-
-**Via Docker:**
-
-```bash
-docker compose exec web python manage.py shell -c "
-from app1.models import Student
-from app1.fotocheck import generate_all_fotocheck_assets
-for s in Student.objects.filter(image__isnull=False).exclude(image=''):
-    generate_all_fotocheck_assets(s)
-    print(s.name, 'done')
-"
-```
-
-### How to print at real size (86 × 129 mm)
-
-1. Download the **PDF** from `/students/<pk>/credential/` → **Download PDF**.
-2. Open in any PDF viewer (Acrobat, Okular, Evince).
-3. In the print dialog, set **page scaling to None / Actual size** (do not scale to fit).
-4. The PDF page is already set to exactly 86 × 129 mm at 300 DPI — it will print at the correct physical size.
-5. For standard credit-card size (85.6 × 54 mm), crop horizontally after printing, or adjust `CARD_H` in `fotocheck.py` to match your template's actual height.
-
-### Individual regeneration (per person)
-
-```
-POST /students/<pk>/fotocheck/regen/
-```
-
-Accessible via the **Regenerate** button on the credential page. Rebuilds QR, face crop, PNG, and PDF in a background thread.
+1. Descargar el **PDF** desde `/students/<pk>/credential/` → **Download PDF**
+2. Abrir en cualquier visor PDF (Acrobat, Okular, Evince)
+3. En el diálogo de impresión, establecer **escala al 100% / tamaño real**
+4. El PDF está configurado a 86 × 129 mm a 300 DPI — imprime al tamaño correcto sin ajustes
 
 ---
 
-## PostgreSQL
+## 📊 Reportes y Exportación
 
-The project uses **PostgreSQL** by default. SQLite is available as a development fallback by setting `DB_ENGINE=django.db.backends.sqlite3` in `.env`.
+El reporte de asistencias en `/students/attendance/` soporta:
 
-### Local setup (Arch Linux)
+- **Búsqueda** por nombre o DNI
+- **Filtro** por área/departamento
+- **Rango de fechas** (desde / hasta)
+- **Exportar a Excel** — Reporte oficial con formato por día del mes, sombreado de fines de semana y totales
+- **Exportar a CSV** — Descarga directa, separado por comas, UTF-8
+- **Impresión** — CSS optimizado oculta la barra lateral y controles
+
+### Columnas del reporte
+
+`Foto | DNI | Nombre | Cargo | Área | Horario | Fecha | Entrada | Salida | Duración | Estado`
+
+### Estados de asistencia
+
+| Estado | Condición |
+|--------|-----------|
+| ✅ Completo | `check_in_time` y `check_out_time` presentes |
+| ✅ Asistió | Solo `check_in_time` presente |
+| — | Sin registro de entrada |
+
+---
+
+## 🐘 Base de Datos PostgreSQL
+
+El proyecto usa **PostgreSQL** por defecto con base de datos `ASISTENCIA_PERSONAL`.
+
+### Configuración local (Arch Linux)
 
 ```bash
-# Install and start PostgreSQL
+# Instalar e iniciar PostgreSQL
 sudo pacman -S postgresql
 sudo systemctl enable --now postgresql
 
-# Create user and database
+# Crear base de datos
 sudo -u postgres psql <<'SQL'
-CREATE USER attendance_user WITH PASSWORD 'YourStrongPassword';
-CREATE DATABASE attendance_db OWNER attendance_user;
-GRANT ALL PRIVILEGES ON DATABASE attendance_db TO attendance_user;
+CREATE DATABASE "ASISTENCIA_PERSONAL";
 SQL
 
-# Configure .env
-echo "DB_ENGINE=django.db.backends.postgresql" >> .env
-echo "DB_NAME=attendance_db" >> .env
-echo "DB_USER=attendance_user" >> .env
-echo "DB_PASSWORD=YourStrongPassword" >> .env
-echo "DB_HOST=127.0.0.1" >> .env
-echo "DB_PORT=5432" >> .env
-
-# Apply migrations
-source venv/bin/activate
+# Aplicar migraciones
+source .venv/bin/activate
 python manage.py migrate
 ```
 
-### Migrating from SQLite to PostgreSQL
+### Backup y restauración
 
 ```bash
-# 1. Export data from SQLite
-DB_ENGINE=django.db.backends.sqlite3 python manage.py dumpdata \
-  --natural-foreign --natural-primary \
-  --exclude=admin.logentry --exclude=contenttypes \
-  --indent=2 > data_backup.json
+# Backup
+pg_dump -U postgres ASISTENCIA_PERSONAL > backup_asistencia.sql
 
-# 2. Switch .env to PostgreSQL and run migrations
-python manage.py migrate
-
-# 3. Load data (fake migration 0004 if DuplicateColumn appears)
-python manage.py loaddata data_backup.json
-
-# 4. Reset PostgreSQL sequences
-python manage.py sqlsequencereset app1 | python manage.py dbshell
+# Restaurar
+psql -U postgres ASISTENCIA_PERSONAL < backup_asistencia.sql
 ```
 
-> **Known quirk:** Migration `app1.0004_uploadedimage_authorized` may fail on PostgreSQL with `DuplicateColumn` because `0001_initial` already creates the column. Fix: `python manage.py migrate app1 0003 && python manage.py migrate app1 0004 --fake && python manage.py migrate`
+> **Trampa de migraciones (squash):** La base de código fue reiniciada en `0001_initial.py` después de que muchas migraciones ya habían sido aplicadas en PostgreSQL. Si `django_migrations` ya contiene `0001_initial` pero faltan columnas en las tablas, crear migraciones correctivas con operaciones `AddField` explícitas — **nunca** borrar filas de `django_migrations` ni recrear las tablas.
 
 ---
 
-## Project Structure
+## 📁 Estructura del Proyecto
 
 ```
 .
-├── app1/                                   # Main Django application
+├── app1/                                   # Aplicación Django principal
 │   ├── models.py                           # Student, Attendance, CameraConfiguration, SystemConfig
-│   ├── views.py                            # All views + CameraManager (MJPEG + ML pipeline)
-│   ├── fotocheck.py                        # Institutional ID card generator (PNG + PDF)
-│   ├── utils.py                            # QR generation, attendance recording logic
-│   ├── urls.py                             # App URL patterns
-│   ├── admin.py                            # Django admin registration
-│   ├── forms.py                            # Django forms
-│   ├── migrations/                         # Database migrations
+│   ├── views.py                            # Vistas + CameraManager (pipeline MJPEG + ML)
+│   ├── fotocheck.py                        # Generador de carnés institucionales (PNG + PDF)
+│   ├── utils.py                            # Generación de QR, lógica de registro de asistencia
+│   ├── report_excel.py                     # Builder de reporte Excel oficial (openpyxl)
+│   ├── report_template.py                  # CLI: rellenar plantilla Excel desde CSV biométrico
+│   ├── urls.py                             # Patrones de URL de la app
+│   ├── admin.py                            # Registro en el admin de Django
+│   ├── migrations/
 │   │   ├── 0001_initial.py
-│   │   ├── ...
-│   │   └── 0013_student_fotocheck_fields.py  # dni, face_crop, fotocheck_png, fotocheck_pdf
-│   ├── static/app1/fotocheck_assets/       # Institutional card assets (versioned)
-│   │   ├── plantilla.jpeg                  # Official card template image
-│   │   └── logo.jpeg                       # Institutional shield/logo for QR centre
-│   └── suc.wav                             # Success sound (server-side Pygame)
-├── Project101/                             # Django project package
-│   ├── settings.py                         # Env-driven DB backend (PostgreSQL default)
+│   │   ├── 0002_add_missing_student_fields.py
+│   │   └── 0003_add_systemconfig_table.py
+│   ├── static/app1/fotocheck_assets/       # Assets del carné (versionados en git)
+│   │   ├── plantilla.jpeg                  # Template de fondo del carné
+│   │   └── logo.png                        # Logo institucional para el centro del QR
+│   └── suc.wav                             # Sonido de éxito (Pygame en servidor)
+├── Project101/                             # Paquete del proyecto Django
+│   ├── settings.py                         # Configuración (BD, zona horaria, media)
 │   ├── urls.py
 │   ├── asgi.py
 │   └── wsgi.py
-├── templates/                              # All HTML templates (project-level)
-│   ├── base.html                           # Shared layout + dark glassmorphism CSS
-│   ├── attendance_kiosk.html               # Public kiosk (MJPEG + result overlay)
-│   ├── capture_student.html                # Personnel registration (webcam + file upload)
-│   ├── credentials_list.html               # Bulk fotocheck management panel
-│   ├── student_credential.html             # Per-person card preview + downloads
-│   ├── student_attendance_list.html        # Attendance report with export
-│   ├── import_students.html                # Bulk CSV/Excel import
-│   ├── system_config.html                  # System settings
-│   └── ...                                # Other admin templates
-├── media/                                  # Uploaded files (gitignored)
-│   ├── students/                           # Face photos
-│   ├── qrcodes/                            # Generated QR PNG files
-│   ├── faces/                              # Circular face crops
-│   └── fotochecks/                         # Generated PNG and PDF cards
-├── Dockerfile                              # Python 3.14-slim image definition
-├── docker-compose.yml                      # Web + PostgreSQL services
-├── entrypoint.sh                           # Wait for DB → migrate → runserver
-├── .dockerignore                           # Excludes venv, media, caches from context
-├── requirements.txt                        # Dependencies (Python 3.12+ reference)
-├── requirements-314.txt                    # Dependencies (Python 3.14 / Arch Linux)
-├── requirements-docker.txt                 # Dependencies (headless Docker build)
-├── install_314.sh                          # Local setup script for Python 3.14 / Arch
+├── templates/                              # Todos los templates HTML (nivel de proyecto)
+│   ├── base.html                           # Layout compartido + CSS dark glassmorphism
+│   ├── attendance_kiosk.html               # Kiosco público (MJPEG + overlay de eventos)
+│   ├── capture_student.html                # Registro de personal (webcam + carga de archivo)
+│   ├── student_list.html                   # Lista de personal con búsqueda y filtros
+│   ├── student_detail.html                 # Detalle de persona con historial de asistencia
+│   ├── student_edit.html                   # Formulario de edición de perfil
+│   ├── student_attendance_list.html        # Reporte de asistencias con exportación
+│   ├── import_students.html                # Importación masiva CSV/Excel
+│   ├── credentials_list.html               # Panel de gestión masiva de fotochecks
+│   ├── student_credential.html             # Vista previa y descarga del carné
+│   └── system_config.html                  # Configuración del sistema (toggles iOS-style)
+├── media/                                  # Archivos subidos (ignorados en git)
+│   ├── students/                           # Fotos de personal
+│   ├── qrcodes/                            # QR generados
+│   ├── faces/                              # Recortes circulares de rostro
+│   └── fotochecks/                         # PNG y PDF de carnés generados
+├── Dockerfile                              # Imagen Python 3.14-slim con todas las deps
+├── docker-compose.yml                      # Servicios web + PostgreSQL
+├── entrypoint.sh                           # Esperar BD → migrate → runserver
+├── .dockerignore
+├── requirements.txt                        # Dependencias (referencia Python 3.12+)
+├── requirements-314.txt                    # Dependencias (Python 3.14 / Arch Linux)
+├── requirements-docker.txt                 # Dependencias (build Docker headless)
+├── install_314.sh                          # Script de instalación local Python 3.14
 ├── manage.py
-├── .env.example                            # Template for environment variables
-├── CLAUDE.md                               # Notes for Claude Code AI assistant
-└── LICENSE
+├── .env.example                            # Template de variables de entorno
+└── CLAUDE.md                               # Instrucciones para Claude Code AI
 ```
 
 ---
 
-## URL Reference
+## 🔗 Referencia de URLs
 
-| URL | Method | Auth | Description |
-|-----|--------|------|-------------|
-| `/` | GET | Public | Redirect to kiosk |
-| `/kiosk/` | GET | Public | Attendance kiosk |
-| `/capture_student/` | GET/POST | Admin | Register new person |
-| `/import/` | GET/POST | Admin | Bulk CSV/Excel import |
-| `/students/` | GET | Admin | Personnel list |
-| `/students/<pk>/` | GET | Admin | Personnel detail |
-| `/students/<pk>/authorize/` | GET/POST | Admin | Toggle face+QR access |
-| `/students/<pk>/credential/` | GET | Admin | Printable ID card |
-| `/students/<pk>/fotocheck/png/` | GET | Admin | Download fotocheck PNG |
-| `/students/<pk>/fotocheck/pdf/` | GET | Admin | Download fotocheck PDF |
-| `/students/<pk>/fotocheck/regen/` | POST | Admin | Regenerate all card assets |
-| `/students/<pk>/qr/` | GET | Admin | Download QR PNG |
-| `/students/<pk>/regenerate-qr/` | POST | Admin | Regenerate QR |
-| `/students/<pk>/delete/` | GET/POST | Admin | Delete person |
-| `/credentials/` | GET | Admin | Bulk fotocheck management |
-| `/credentials/generate/` | POST | Admin | Bulk regenerate all cards |
-| `/students/attendance/` | GET | Admin | Attendance report |
-| `/students/attendance/export/csv/` | GET | Admin | Export CSV |
-| `/students/attendance/export/excel/` | GET | Admin | Export Excel |
-| `/config/` | GET/POST | Admin | System configuration |
-| `/camera-config/` | GET/POST | Admin | Add camera |
-| `/camera-config/list/` | GET | Admin | List cameras |
-| `/camera/start/` | POST | Admin | Start worker threads |
-| `/camera/stop/` | POST | Admin | Stop all threads |
+| URL | Método | Acceso | Descripción |
+|-----|--------|--------|-------------|
+| `/` | GET | Público | Redirección al kiosco |
+| `/kiosk/` | GET | Público | Kiosco de asistencia |
+| `/login/` | GET/POST | Público | Inicio de sesión |
+| `/logout/` | GET | Auth | Cerrar sesión |
+| `/capture_student/` | GET/POST | Admin | Registrar nueva persona |
+| `/import/` | GET/POST | Admin | Importación masiva CSV/Excel |
+| `/students/` | GET | Admin | Lista de personal |
+| `/students/<pk>/` | GET | Admin | Detalle de persona |
+| `/students/<pk>/edit/` | GET/POST | Admin | Editar perfil de persona |
+| `/students/<pk>/authorize/` | POST | Admin | Activar/desactivar acceso facial+QR |
+| `/students/<pk>/delete/` | GET/POST | Admin | Eliminar persona |
+| `/students/<pk>/credential/` | GET | Admin | Vista previa carné imprimible |
+| `/students/<pk>/fotocheck/png/` | GET | Admin | Descargar fotocheck PNG |
+| `/students/<pk>/fotocheck/pdf/` | GET | Admin | Descargar fotocheck PDF |
+| `/students/<pk>/fotocheck/regen/` | POST | Admin | Regenerar todos los assets del carné |
+| `/students/<pk>/regenerate-qr/` | POST | Admin | Regenerar QR |
+| `/students/<pk>/qr/` | GET | Admin | Descargar QR PNG |
+| `/credentials/` | GET | Admin | Panel masivo de fotochecks |
+| `/credentials/generate/` | POST | Admin | Regenerar carnés de todo el personal |
+| `/students/attendance/` | GET | Admin | Reporte de asistencias |
+| `/students/attendance/export/csv/` | GET | Admin | Exportar CSV |
+| `/students/attendance/export/excel/` | GET | Admin | Exportar Excel oficial |
+| `/config/` | GET/POST | Admin | Configuración del sistema |
+| `/camera-config/` | GET/POST | Admin | Agregar cámara |
+| `/camera-config/list/` | GET | Admin | Listar cámaras |
+| `/camera-config/update/<pk>/` | GET/POST | Admin | Editar cámara |
+| `/camera-config/delete/<pk>/` | POST | Admin | Eliminar cámara |
+| `/camera/start/` | POST | Admin | Iniciar threads de cámara |
+| `/camera/stop/` | POST | Admin | Detener todos los threads |
 | `/camera/status/` | GET | Admin | JSON: `{running, error, logs[]}` |
-| `/camera/stream/` | GET | Public | MJPEG multipart stream |
-| `/login/` | GET/POST | Public | Login |
-| `/logout/` | GET | Auth | Logout |
+| `/camera/stream/` | GET | Público | Stream MJPEG multipart |
 
 ---
 
-## Camera API
+## 📹 API de Cámara
 
-These endpoints are consumed internally by the kiosk frontend:
-
-| Endpoint | Method | Description |
+| Endpoint | Método | Descripción |
 |----------|--------|-------------|
-| `/camera/start/` | POST | Start `CameraManager` worker threads |
-| `/camera/stop/` | POST | Stop all threads and release captures |
-| `/camera/status/` | GET | JSON: `{running, error, logs[]}` — polled every 1 s |
-| `/camera/stream/` | GET | MJPEG multipart stream for `<img src="...">` |
+| `/camera/start/` | POST | Inicia threads de `CameraManager` |
+| `/camera/stop/` | POST | Detiene todos los threads y libera capturas |
+| `/camera/status/` | GET | JSON: `{running, error, logs[]}` — consultado cada 1 s |
+| `/camera/stream/` | GET | Stream MJPEG para `<img src="...">` |
 
-The `logs[]` array carries attendance events (`checked_in`, `checked_out`, `already_done`, `qr_invalid`, `error`) that the frontend renders as overlay cards.
-
----
-
-## Reports & Export
-
-The attendance report at `/students/attendance/` supports:
-
-- **Search** by name
-- **Filter** by area/department
-- **Date range** filter
-- **Export to CSV** — standard comma-separated, UTF-8
-- **Export to Excel** — `.xlsx` with formatted headers via openpyxl
-- **Print** — print-optimized CSS hides the sidebar and controls
-
-Columns exported: Date, Name, Position, Area, Work Schedule, Class/Group, Check-in, Check-out, Duration.
+El array `logs[]` transporta eventos de asistencia (`checked_in`, `checked_out`, `already_done`, `qr_invalid`, `error`) que el frontend renderiza como tarjetas superpuestas.
 
 ---
 
-## Personnel Import
+## 🏗️ Arquitectura
 
-Supported file formats: `.csv` (UTF-8 or UTF-8 BOM) and `.xlsx`.
-
-| Column | Alias | Required |
-|--------|-------|----------|
-| `name` | `nombre` | **Yes** |
-| `dni` | `dni` | No |
-| `email` | `correo` | No |
-| `phone_number` | `telefono` | No |
-| `position` | `cargo` | No |
-| `area` | `área` | No |
-| `work_schedule` | `horario` | No |
-| `student_class` | `clase` | No |
-
-All imported rows are auto-authorized and receive a generated QR code. Rows missing `name` and rows with duplicate emails are skipped with a warning.
-
----
-
-## Architecture
-
-### ML Pipeline (per frame)
+### Pipeline ML (por frame)
 
 ```
-cap.read() → frame (original, unflipped)
+cap.read() → frame (original, sin voltear)
     │
-    ├─► _decode_qr(frame)              QR: resize→640px, raw gray → cv2.QRCodeDetector
-    │         └─► _handle_qr()         per-person 10s debounce + DB write
+    ├─► _decode_qr(frame)              QR: resize→640px, gris → cv2.QRCodeDetector
+    │         └─► _handle_qr()         debounce 10s por persona + escritura BD
     │
     ├─► _detect_and_encode(rgb)         MTCNN detect → InceptionResnetV1 embed
-    │         └─► _recognize()          L2 distance vs cached embeddings (validated)
-    │                   └─► _handle_face()  stability buffer (3 frames) → DB write
+    │         └─► _recognize()          distancia L2 vs embeddings en caché
+    │                   └─► _handle_face()  buffer 3 frames → escritura BD
     │
-    └─► cv2.flip(frame, 1)             Mirror for display only
-              └─► bounding boxes        x coords remapped: mx = w - x
-              └─► imencode → MJPEG queue
+    └─► cv2.flip(frame, 1)             Voltear para mostrar (efecto espejo)
+              └─► coordenadas bbox      remapeadas: mx = ancho - x
+              └─► imencode → cola MJPEG
 ```
 
-### Fotocheck pipeline
+### Pipeline de fotocheck
 
 ```
 generate_all_fotocheck_assets(student)
     │
-    ├─► generate_qr_with_logo()        qrcode (ERROR_CORRECT_H) + logo.jpeg overlay → media/qrcodes/
-    ├─► save_face_crop()               MTCNN crop + circular mask → media/faces/
-    ├─► generate_fotocheck_png()       Open plantilla.jpeg → erase template fields →
-    │                                   paste face photo, write text, paste QR → media/fotochecks/
-    └─► generate_fotocheck_pdf()       PNG → ReportLab canvas at 86×129 mm → media/fotochecks/
+    ├─► generate_qr_with_logo()        qrcode (ERROR_CORRECT_H) + logo.png → media/qrcodes/
+    ├─► save_face_crop()               MTCNN recorte + máscara circular → media/faces/
+    ├─► generate_fotocheck_png()       Abrir plantilla → pegar foto, texto, QR → media/fotochecks/
+    └─► generate_fotocheck_pdf()       PNG → canvas ReportLab a 86×129 mm → media/fotochecks/
 ```
 
-### Duplicate prevention layers
+### Capas de prevención de duplicados
 
-1. **Per-person debounce** (`_COOLDOWN_SECONDS = 10`): prevents DB writes within 10 s of the last event for that person
-2. **Display throttle** (`_DISPLAY_THROTTLE = 5.0`): "ya fue registrado" feedback shown at most once per 5 s per person
-3. **Checkout window** (configurable via System Config): check-out only allowed after N minutes
-4. **Frontend throttle** (`_ALREADY_DONE_MS = 12000`): per-person card shown at most once per 12 s in the browser
+| Capa | Constante | Efecto |
+|------|-----------|--------|
+| Debounce por persona | `_COOLDOWN_SECONDS = 10` | Bloquea escrituras BD dentro de 10 s |
+| Throttle de display | `_DISPLAY_THROTTLE = 5.0` | Feedback "ya registrado" máx. 1 vez cada 5 s |
+| Ventana de check-out | `SystemConfig.checkout_delay_minutes` | Salida solo después de N minutos |
+| Throttle frontend | `_ALREADY_DONE_MS = 12000` (JS) | Tarjeta de persona máx. 1 vez cada 12 s |
 
-### Embedding cache
+### Caché de embeddings
 
-- Rebuilt every 30 seconds (`_CACHE_TTL = 30.0`) or invalidated immediately on student changes
-- **1 embedding per student** — multi-face photos use only the first detected face with a warning
-- Corrupted or unreadable photos are skipped silently (logged as warnings)
-- Length sanity check before caching prevents any index mismatch
+- Reconstruida cada 30 s (`_CACHE_TTL = 30.0`) o invalidada inmediatamente al cambiar un estudiante
+- **1 embedding por persona** — fotos con múltiples rostros usan solo el primero (con advertencia)
+- Fotos corruptas o ilegibles se omiten y se registran como warnings en los logs
+- Verificación de integridad antes de cachear: `len(known_enc) == len(known_names)`
 
 ---
 
-## Troubleshooting
+## 🆕 Mejoras Recientes
 
-### Camera won't start
+### Corrección crítica: inversión de entrada/salida en importación
+
+**Problema:** Al importar archivos Excel con columnas `hora entrada` y `hora salida`, si una fila tenía la celda de entrada vacía y salida con valor, el tiempo se guardaba en `check_out_time` (columna SALIDA) en lugar de `check_in_time` (ENTRADA).
+
+**Causa raíz:** La función `_parse_row_times()` en `app1/views.py` incluía la condición `and 'time_in' not in col_map` que bloqueaba la promoción cuando ambas columnas existían en el encabezado, aunque la celda de entrada estuviera vacía en la fila.
+
+**Fix aplicado:** La promoción ahora es incondicional — si una fila produce `check_in=None` y `check_out≠None`, el tiempo se promueve siempre a `check_in_time`. Dos tiempos reales en la misma fila se respetan como entrada y salida sin cambios.
+
+### Logging de mapeo por fila
+
+El servidor registra en consola el resultado exacto de cada fila importada:
+```
+INFO IMPORT fila N | DNI=XXXXXXXX | entrada=HH:MM:SS | salida=NULL | estado=Asistió [NUEVO]
+```
+
+### Edición de perfiles de personal
+
+Nueva vista `/students/<pk>/edit/` con formulario completo que permite actualizar todos los campos sin necesidad del panel `/admin/` de Django.
+
+### Placeholders para historial biométrico
+
+DNIs importados que no existen en la BD generan automáticamente un perfil temporal. Aparecen como "Desconocido" en los reportes y permiten preservar el historial completo sin pérdida de datos.
+
+### Sistema de configuración singleton (`SystemConfig`)
+
+Modelo singleton accesible vía `SystemConfig.get()` que centraliza todos los parámetros del sistema: umbrales de reconocimiento, delays de check-out, flags de habilitación de facial/QR.
+
+---
+
+## 🔧 Solución de Problemas
+
+### La cámara no inicia
 
 ```
-Error: Cannot open camera: <name>
+Error: Cannot open camera: <nombre>
 ```
 
-- Verify the camera source index/URL in Camera Config
-- Make sure no other process holds the camera (close browser tabs with camera access)
-- For IP cameras, test the URL in VLC first
+- Verificar el índice/URL de la fuente en Camera Config
+- Asegurarse de que ningún otro proceso tenga la cámara ocupada
+- Para cámaras IP, probar la URL en VLC primero
 
-### Face not recognized
+### Rostro no reconocido
 
-- Ensure the person is **authorized** (`authorized=True`) in the admin panel
-- Lighting matters — even frontal lighting works best
-- Lower the recognition threshold in Camera Config or System Config (e.g., `0.6` → `0.5`)
-- The embedding cache refreshes every 30 s; wait after authorizing a new person
-- Check Django logs for `WARNING: No face detected in photo for student` — the registration photo may be unusable; re-register with a clear solo portrait
+- Verificar que la persona esté **authorized=True** en el panel de admin
+- La iluminación importa — luz frontal pareja funciona mejor
+- Bajar el umbral de reconocimiento (ej. `0.6` → `0.5`)
+- La caché de embeddings se actualiza cada 30 s — esperar después de autorizar una persona nueva
+- Revisar logs de Django: `WARNING: No face detected in photo for student` — re-registrar con retrato individual claro
 
-### Fotocheck PNG/PDF not generated
+### Fotocheck PNG/PDF no generado
 
-- Check `media/fotochecks/` exists and is writable
-- Run `python manage.py check` to verify the application configuration
-- Run `from app1.fotocheck import validate_assets; print(validate_assets())` in the Django shell — should return `(True, 'Assets OK')`
-- If the template file is missing, copy `plantilla.jpeg` and `logo.jpeg` to `app1/static/app1/fotocheck_assets/`
+- Verificar que `media/fotochecks/` exista y sea escribible
+- Ejecutar en el shell Django:
+  ```python
+  from app1.fotocheck import validate_assets
+  print(validate_assets())   # debe retornar (True, 'Assets OK')
+  ```
+- Si faltan assets: copiar `plantilla.jpeg` y `logo.png` a `app1/static/app1/fotocheck_assets/`
 
-### PostgreSQL connection refused
+### Error de conexión PostgreSQL
 
 ```
 django.db.utils.OperationalError: connection refused
 ```
 
-- Verify PostgreSQL is running: `systemctl status postgresql`
-- Check `.env` values for `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`
-- For Docker: the `web` service waits for the `db` healthcheck; check `docker compose logs db`
+- Verificar que PostgreSQL esté corriendo: `systemctl status postgresql`
+- Revisar valores en `.env`: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`
+- En Docker: `docker compose logs db`
 
-### pygame / audio errors on headless server
-
-```
-pygame.error: No available audio device
-```
-
-Set the SDL audio driver to null before starting:
-
-```bash
-export SDL_AUDIODRIVER=dummy
-python manage.py runserver
-```
-
-Or set `SDL_AUDIODRIVER=dummy` in your `.env` file.
-
-### Python 3.14 — no compatible wheel
-
-Run `bash install_314.sh` instead of `pip install -r requirements.txt`. The script handles Python 3.14-specific wheel selection and compiles Pygame from source.
-
-### `facenet-pytorch` numpy conflict
-
-```bash
-pip install --no-deps facenet-pytorch==2.6.0
-```
-
-The `--no-deps` flag prevents pip from downgrading numpy to satisfy a stale `<2.0` constraint declared in the package metadata.
-
-### Docker — camera device not found
-
-```
-Error response from daemon: error gathering device information: no such file or directory
-```
-
-The host doesn't have `/dev/video0`. Either:
-- Comment out the `devices` block in `docker-compose.yml` if running without a camera
-- Verify the camera is connected: `ls /dev/video*`
-- Use the correct device path if it's `/dev/video1` or higher
-
-### Docker — pygame audio error
+### Error de audio Pygame en servidor headless
 
 ```
 pygame.error: No available audio device
 ```
 
-Add to your `.env`:
-
+Agregar al `.env`:
 ```
 SDL_AUDIODRIVER=dummy
 SDL_VIDEODRIVER=dummy
 ```
 
-These are already set in `.env.example`. The kiosk uses browser-side Web Audio API for chimes; the server-side pygame beep is optional.
+### Python 3.14 — sin wheel compatible
 
-### Docker — OpenCV import error
+Ejecutar `bash install_314.sh` en lugar de `pip install -r requirements.txt`.
 
+### Conflicto de numpy con facenet-pytorch
+
+```bash
+pip install --no-deps facenet-pytorch==2.6.0
 ```
-ImportError: libGL.so.1: cannot open shared object file
+
+### Trampa de migraciones (squash)
+
+Si faltan columnas en las tablas pero `django_migrations` ya tiene `0001_initial`:
+
+```bash
+# Crear migración correctiva — NO borrar filas de django_migrations
+python manage.py makemigrations app1 --name add_missing_fields
+python manage.py migrate
 ```
 
-The `libgl1` system package is missing. Rebuild the image:
+### Docker — dispositivo de cámara no encontrado
+
+```yaml
+# En docker-compose.yml, comentar el bloque devices si no hay cámara:
+# devices:
+#   - /dev/video0:/dev/video0
+```
+
+### Docker — error OpenCV libGL
 
 ```bash
 docker compose build --no-cache
 ```
 
-If the problem persists, verify the Dockerfile installs `libgl1` in the `apt-get` block.
+### Error de codificación al importar CSV
 
-### Import fails with encoding error
-
-CSV files must be saved as **UTF-8** or **UTF-8 BOM** (the default for Excel-exported CSVs). The template downloadable from the import page uses UTF-8 BOM.
+Los archivos CSV deben estar en **UTF-8** o **UTF-8 BOM**. En Excel: "Guardar como → CSV UTF-8 (con BOM)".
 
 ---
 
-## How to clone and run on another machine
+## 📄 Licencia y Autor
 
-```bash
-# 1. Clone
-git clone git@github.com:Wil-1302/Sistema-de-control-de-asistencia.git
-cd Sistema-de-control-de-asistencia
-
-# 2. Configure environment
-cp .env.example .env
-# Edit .env: set DB_PASSWORD (and optionally DB_ENGINE=sqlite3 for dev)
-
-# Option A — Docker (recommended, no Python install needed)
-docker compose build
-docker compose up
-docker compose exec web python manage.py createsuperuser
-
-# Option B — Local Python 3.14 (Arch Linux)
-python3.14 -m venv venv
-source venv/bin/activate
-bash install_314.sh
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py runserver
-
-# 3. Open the kiosk
-# http://localhost:8000/
-```
-
-The institutional template assets (`plantilla.jpeg`, `logo.jpeg`) are versioned in the repository under `app1/static/app1/fotocheck_assets/` — no manual copying required after cloning.
-
----
-
-## License
-
-This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
-
----
-
-## Author
+Este proyecto está bajo licencia **MIT** — ver [LICENSE](LICENSE) para detalles.
 
 **Wil-1302**
 - GitHub: [@Wil-1302](https://github.com/Wil-1302)
@@ -876,4 +792,4 @@ This project is licensed under the **MIT License** — see [LICENSE](LICENSE) fo
 
 ---
 
-*Built with Django 6, PyTorch 2.11, OpenCV 4.13, ReportLab 4.5, and Python 3.14.*
+*Construido con Django 5.2.14, PyTorch 2.x, OpenCV 4.x, ReportLab 4.x y Python 3.14.*

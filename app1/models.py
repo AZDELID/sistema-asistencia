@@ -49,6 +49,13 @@ class Student(models.Model):
         help_text="Institutional ID card — print-ready PDF 86×54 mm"
     )
 
+    @property
+    def display_name(self):
+        """Real name for display. Returns 'Desconocido' for placeholder records."""
+        if self.name.startswith('Pendiente - DNI '):
+            return 'Desconocido'
+        return self.name
+
     def __str__(self):
         return self.name
 
@@ -82,8 +89,8 @@ class Attendance(models.Model):
         return None
 
     def save(self, *args, **kwargs):
-        if not self.pk:
-            self.date = timezone.localdate()
+        # date must be set explicitly by the caller; no default override here
+        # so historical imports preserve their real date
         super().save(*args, **kwargs)
 
 
