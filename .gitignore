@@ -11,9 +11,9 @@ env/
 .venv/
 
 # ── Django ────────────────────────────────────────────────────
-db.sqlite3
+#db.sqlite3
 db.sqlite3.backup.*
-*.sqlite3
+#*.sqlite3
 media/
 staticfiles/
 static_collected/
