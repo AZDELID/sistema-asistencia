@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.14-blue?logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-5.2.14-green?logo=django&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue?logo=postgresql&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-3-blue?logo=sqlite&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-red?logo=pytorch&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
@@ -22,7 +22,7 @@ Sistema biométrico de asistencia en tiempo real para instituciones y organizaci
 - [Importación de Asistencias](#-importación-de-asistencias)
 - [Fotocheck / Carnés Institucionales](#-fotocheck--carnés-institucionales)
 - [Reportes y Exportación](#-reportes-y-exportación)
-- [Base de Datos PostgreSQL](#-base-de-datos-postgresql)
+- [Base de datos SQLite](#-base-de-datos-sqlite)
 - [Estructura del Proyecto](#-estructura-del-proyecto)
 - [Referencia de URLs](#-referencia-de-urls)
 - [API de Cámara](#-api-de-cámara)
@@ -94,8 +94,8 @@ El personal o alumnos se acercan al kiosco y son reconocidos automáticamente po
 | Lectura QR | `cv2.QRCodeDetector` (sin dependencias extra) |
 | Carné / PDF | Pillow 12 (overlay PNG) + ReportLab 4.x (PDF) |
 | Streaming de video | MJPEG multipart sobre HTTP |
-| Base de datos | PostgreSQL 17+ (producción) |
-| Adaptador DB | psycopg2-binary 2.9 |
+| Base de datos | SQLite 3 (local) |
+| Adaptador DB | sqlite3 (builtin) |
 | Audio | Pygame (servidor) + Web Audio API (navegador) |
 | Excel / importación | openpyxl |
 | Frontend | Vanilla JS, CSS glassmorphism, Font Awesome |
@@ -121,7 +121,7 @@ La forma más rápida de ejecutar el sistema sin instalar Python ni dependencias
 git clone git@github.com:Wil-1302/Sistema-de-control-de-asistencia.git
 cd Sistema-de-control-de-asistencia
 cp .env.example .env
-# Editar .env: establecer DB_PASSWORD, SECRET_KEY
+# Editar .env: establecer SECRET_KEY
 
 # 2. Construir e iniciar
 docker compose up --build
@@ -239,11 +239,6 @@ El kiosco está disponible en `http://127.0.0.1:8000/`.
 | `SECRET_KEY` | clave de dev insegura | Clave secreta Django — **cambiar en producción** |
 | `DEBUG` | `True` | Poner `False` en producción |
 | `ALLOWED_HOSTS` | `*` | Hosts permitidos separados por coma |
-| `DB_NAME` | `ASISTENCIA_PERSONAL` | Nombre de la base de datos PostgreSQL |
-| `DB_USER` | `postgres` | Usuario PostgreSQL |
-| `DB_PASSWORD` | _(requerido)_ | Contraseña PostgreSQL |
-| `DB_HOST` | `127.0.0.1` | Host PostgreSQL |
-| `DB_PORT` | `5432` | Puerto PostgreSQL |
 | `TIME_ZONE` | `America/Lima` | Zona horaria |
 | `SDL_AUDIODRIVER` | _(sin definir)_ | Poner `dummy` en servidores sin audio |
 | `SDL_VIDEODRIVER` | _(sin definir)_ | Poner `dummy` en servidores headless |
@@ -467,36 +462,18 @@ El reporte de asistencias en `/students/attendance/` soporta:
 
 ---
 
-## 🐘 Base de Datos PostgreSQL
+## �️ Base de datos SQLite
 
-El proyecto usa **PostgreSQL** por defecto con base de datos `ASISTENCIA_PERSONAL`.
+El proyecto usa **SQLite** por defecto con el archivo `db.sqlite3` en la raíz del proyecto.
 
-### Configuración local (Arch Linux)
+### Configuración local
 
 ```bash
-# Instalar e iniciar PostgreSQL
-sudo pacman -S postgresql
-sudo systemctl enable --now postgresql
-
-# Crear base de datos
-sudo -u postgres psql <<'SQL'
-CREATE DATABASE "ASISTENCIA_PERSONAL";
-SQL
-
-# Aplicar migraciones
 source .venv/bin/activate
 python manage.py migrate
 ```
 
-### Backup y restauración
-
-```bash
-# Backup
-pg_dump -U postgres ASISTENCIA_PERSONAL > backup_asistencia.sql
-
-# Restaurar
-psql -U postgres ASISTENCIA_PERSONAL < backup_asistencia.sql
-```
+SQLite no necesita servidor externo ni credenciales adicionales.
 
 > **Trampa de migraciones (squash):** La base de código fue reiniciada en `0001_initial.py` después de que muchas migraciones ya habían sido aplicadas en PostgreSQL. Si `django_migrations` ya contiene `0001_initial` pero faltan columnas en las tablas, crear migraciones correctivas con operaciones `AddField` explícitas — **nunca** borrar filas de `django_migrations` ni recrear las tablas.
 
@@ -546,8 +523,8 @@ psql -U postgres ASISTENCIA_PERSONAL < backup_asistencia.sql
 │   ├── faces/                              # Recortes circulares de rostro
 │   └── fotochecks/                         # PNG y PDF de carnés generados
 ├── Dockerfile                              # Imagen Python 3.14-slim con todas las deps
-├── docker-compose.yml                      # Servicios web + PostgreSQL
-├── entrypoint.sh                           # Esperar BD → migrate → runserver
+├── docker-compose.yml                      # Servicios web con SQLite local
+├── entrypoint.sh                           # Migrate → runserver
 ├── .dockerignore
 ├── requirements.txt                        # Dependencias (referencia Python 3.12+)
 ├── requirements-314.txt                    # Dependencias (Python 3.14 / Arch Linux)
@@ -720,15 +697,15 @@ Error: Cannot open camera: <nombre>
   ```
 - Si faltan assets: copiar `plantilla.jpeg` y `logo.png` a `app1/static/app1/fotocheck_assets/`
 
-### Error de conexión PostgreSQL
+### Error de conexión SQLite
 
 ```
-django.db.utils.OperationalError: connection refused
+django.db.utils.OperationalError: unable to open database file
 ```
 
-- Verificar que PostgreSQL esté corriendo: `systemctl status postgresql`
-- Revisar valores en `.env`: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`
-- En Docker: `docker compose logs db`
+- Verificar que `db.sqlite3` exista y tenga permisos de lectura/escritura.
+- SQLite usa únicamente `db.sqlite3` en el proyecto; no hay servidor de base de datos externo.
+- En Docker: `docker compose logs web`
 
 ### Error de audio Pygame en servidor headless
 

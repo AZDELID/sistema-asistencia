@@ -1,31 +1,10 @@
 services:
 
-  # ── PostgreSQL ─────────────────────────────────────────────────────────────
-  db:
-    image: postgres:17-alpine
-    container_name: faceattend_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: attendance_db
-      POSTGRES_USER: attendance_user
-      POSTGRES_PASSWORD: Att3nd@nce_Secure2026!
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U attendance_user -d attendance_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   # ── Django application ─────────────────────────────────────────────────────
   web:
     build: .
     image: faceattend-ai:latest
     container_name: faceattend_web
-    depends_on:
-      db:
-        condition: service_healthy
-
     # ── Port mapping ─────────────────────────────────────────────────────────
     ports:
       - "8000:8000"
@@ -37,12 +16,6 @@ services:
       - .:/app
       # Persist uploaded media (student photos, QR codes) across container restarts.
       - media_data:/app/media
-
-    # ── Environment ──────────────────────────────────────────────────────────
-    env_file:
-      - .env
-    environment:
-      DB_HOST: db   # override host to point to the compose db service
 
     # ── Camera access (Linux) ─────────────────────────────────────────────
     # Uncomment the devices block below to pass a USB/V4L2 camera from the host.
@@ -61,6 +34,4 @@ services:
 
 volumes:
   media_data:
-    driver: local
-  postgres_data:
     driver: local

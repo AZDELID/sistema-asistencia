@@ -47,8 +47,5 @@ tzdata==2026.2
 openpyxl==3.1.5
 et-xmlfile==2.0.0
 
-# PostgreSQL adapter (binary wheel, no libpq-dev needed in the container)
-psycopg2-binary==2.9.12
-
 # Fotocheck / ID card generation (86×54 mm @ 300 DPI)
 reportlab==4.5.0
